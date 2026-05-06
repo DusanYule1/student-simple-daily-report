@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Runtime data
+instance/
+*.db
+*.sqlite3
+*.log
+logs/
+
+# Build output
+build/
+frontend/build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Backup files
+docker-compose.yml.bk

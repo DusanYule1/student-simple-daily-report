@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./instance:/app/instance
+      # - ./progress.db:/app/backend/progress.db  # 挂载 progress.db 文件
+    environment:
+      - FLASK_APP=backend/app.py
+      - DB_PATH=${DB_PATH}
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_PORT=${SMTP_PORT}
+      - EMAIL_ADDRESS=${EMAIL_ADDRESS}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - RECIPIENTS_CSV=${RECIPIENTS_CSV:-/app/instance/recipients.csv}
+    command: flask run --host=0.0.0.0
+
+
+  nginx:
+    image: nginx:1.25-alpine-slim
+    restart: unless-stopped
+    ports:
+      - "14080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./build:/front
+    depends_on:
+      - backend
+
+  daily_report:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - ./instance:/app/instance
+    restart: unless-stopped
+    environment:
+      - DB_PATH=${DB_PATH}
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_PORT=${SMTP_PORT}
+      - EMAIL_ADDRESS=${EMAIL_ADDRESS}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - REPORT_TIME=${REPORT_TIME:-06:00}
+      - TIMEZONE=${TIMEZONE:-Asia/Shanghai}
+      - RECIPIENTS_CSV=${RECIPIENTS_CSV:-/app/instance/recipients.csv}
+    command: ./backend/cron_entry.sh
+    depends_on:
+      - backend
