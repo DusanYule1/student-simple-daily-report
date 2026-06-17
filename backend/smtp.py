@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import markdown
 from backend.config import Config
 # ================== 配置区 ==================
 
@@ -65,6 +66,15 @@ def get_color(work_time, effective_time):
         return "#ffcccc"
     else:
         return "red"
+
+def render_markdown(text):
+    if not text or text == '无':
+        return '无'
+    return markdown.markdown(
+        text,
+        extensions=['nl2br', 'fenced_code', 'tables'],
+        output_format='html5',
+    )
 
 def send_daily_report():
     # 以 3:00 为切分，计算“上一天”的归属日期
@@ -152,9 +162,9 @@ def send_daily_report():
             <li style='background-color:{color};'>
                 <strong>{row['name']} ({row['username']})</strong><br>
                 工作时长: {effective_time_val} ／ {work_time_val} 小时<br>
-                主要工作: {main_work_val}<br>
-                明日计划: {tomorrow_plan_val}<br>
-                遇到的困难: {difficulty_val}<br>
+                主要工作:<br>{render_markdown(main_work_val)}<br>
+                明日计划:<br>{render_markdown(tomorrow_plan_val)}<br>
+                遇到的困难:<br>{render_markdown(difficulty_val)}<br>
             </li><br>
             """
         body += "</ul>"

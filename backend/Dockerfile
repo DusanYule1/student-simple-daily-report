@@ -8,7 +8,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cron \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir flask flask-sqlalchemy flask-cors
+    && pip install --no-cache-dir flask flask-sqlalchemy flask-cors markdown
 
 # 复制后端代码
 COPY backend/ ./backend/
