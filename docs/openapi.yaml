@@ -1,0 +1,1470 @@
+openapi: 3.1.0
+info:
+  title: 学生简易日报系统 API
+  version: 1.1.0
+  description: |
+    Netlify Functions 提供的 V1 JSON API。
+    学生使用 HttpOnly Session Cookie；管理员使用 Supabase Auth Bearer Token。
+servers:
+  - url: /api/v1
+    description: 当前 Netlify 站点同域 API
+tags:
+  - name: Student Auth
+  - name: Students
+  - name: Board
+  - name: Reports
+  - name: Admin
+  - name: Audit
+paths:
+  /student/session:
+    post:
+      tags: [Student Auth]
+      summary: 学生登录
+      operationId: createStudentSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentLoginRequest'
+      responses:
+        '200':
+          description: 登录成功并设置学生 Session Cookie
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: HttpOnly、Secure、SameSite=Lax 的 student_session Cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentSessionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    get:
+      tags: [Student Auth]
+      summary: 获取当前学生 Session
+      operationId: getStudentSession
+      security:
+        - studentCookie: []
+      responses:
+        '200':
+          description: 当前学生会话
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentSessionResponse'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+    delete:
+      tags: [Student Auth]
+      summary: 学生退出
+      operationId: deleteStudentSession
+      security:
+        - studentCookie: []
+      responses:
+        '204':
+          description: Session 已撤销，Cookie 已清除
+  /student/password:
+    put:
+      tags: [Student Auth]
+      summary: 修改学生本人密码
+      operationId: updateStudentPassword
+      security:
+        - studentCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                  minLength: 1
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        '204':
+          description: 密码已更新
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+  /students:
+    get:
+      tags: [Students]
+      summary: 获取可见学生
+      operationId: listVisibleStudents
+      security:
+        - studentCookie: []
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/Page'
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: 学生分页列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessBase'
+                  - type: object
+                    required: [data, meta]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StudentSummary'
+                      meta:
+                        $ref: '#/components/schemas/PaginatedMeta'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+  /board/monthly:
+    get:
+      tags: [Board]
+      summary: 获取单月学生贡献看板
+      operationId: getMonthlyBoard
+      security:
+        - studentCookie: []
+        - adminBearer: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+            example: 2026-07
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: 单月看板
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyBoardResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /students/{student_id}/reports:
+    get:
+      tags: [Reports]
+      summary: 获取单个学生在时间段内的工作详情
+      operationId: listStudentReports
+      security:
+        - studentCookie: []
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [date_asc, date_desc]
+            default: date_desc
+        - $ref: '#/components/parameters/Page'
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 31
+        - name: include_missing
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 单人时间段日报
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentReportRangeResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /students/{student_id}/reports/{report_date}:
+    get:
+      tags: [Reports]
+      summary: 获取单个学生某日日报
+      operationId: getStudentReportByDate
+      security:
+        - studentCookie: []
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+        - $ref: '#/components/parameters/ReportDate'
+      responses:
+        '200':
+          description: 日报详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /reports/today:
+    get:
+      tags: [Reports]
+      summary: 获取本人的今日日报和预填内容
+      operationId: getTodayReport
+      security:
+        - studentCookie: []
+      responses:
+        '200':
+          description: 今日日报状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodayReportResponse'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+    put:
+      tags: [Reports]
+      summary: 新增或更新本人今日日报
+      operationId: upsertTodayReport
+      security:
+        - studentCookie: []
+      requestBody:
+        $ref: '#/components/requestBodies/UpsertReport'
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+  /reports/{report_date}:
+    get:
+      tags: [Reports]
+      summary: 获取本人指定日期日报
+      operationId: getOwnReportByDate
+      security:
+        - studentCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ReportDate'
+      responses:
+        '200':
+          description: 日报详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Reports]
+      summary: 新增或更新本人指定日期日报
+      operationId: upsertOwnReportByDate
+      security:
+        - studentCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ReportDate'
+      requestBody:
+        $ref: '#/components/requestBodies/UpsertReport'
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/me:
+    get:
+      tags: [Admin]
+      summary: 获取当前管理员资料
+      operationId: getAdminProfile
+      security:
+        - adminBearer: []
+      responses:
+        '200':
+          description: 管理员资料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProfileResponse'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/students:
+    get:
+      tags: [Admin]
+      summary: 查询学生管理列表
+      operationId: listAdminStudents
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/StudentStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/AdminPageSize'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name_asc, created_asc, created_desc]
+            default: created_desc
+      responses:
+        '200':
+          description: 学生管理分页列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessBase'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StudentProfile'
+                      meta:
+                        $ref: '#/components/schemas/PaginatedMeta'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      summary: 创建学生
+      operationId: createStudent
+      security:
+        - adminBearer: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentRequest'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/students/{student_id}:
+    get:
+      tags: [Admin]
+      summary: 获取学生管理详情
+      operationId: getAdminStudent
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: 学生管理详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStudentDetailResponse'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin]
+      summary: 编辑或启停学生
+      operationId: updateAdminStudent
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStudentRequest'
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/students/{student_id}/temporary-password:
+    post:
+      tags: [Admin]
+      summary: 设置学生临时密码
+      operationId: setStudentTemporaryPassword
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [temporary_password]
+              properties:
+                temporary_password:
+                  type: string
+                  minLength: 8
+      responses:
+        '204':
+          description: 临时密码已设置
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/students/{student_id}/sessions:
+    delete:
+      tags: [Admin]
+      summary: 撤销学生全部 Session
+      operationId: revokeStudentSessions
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: 已撤销
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessBase'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [revoked_count]
+                        properties:
+                          revoked_count:
+                            type: integer
+                            minimum: 0
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/audit-logs:
+    get:
+      tags: [Audit]
+      summary: 查询管理员审计日志
+      operationId: listAdminAuditLogs
+      security:
+        - adminBearer: []
+      parameters:
+        - name: actor_id
+          in: query
+          schema:
+            type: string
+        - name: target_student_id
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: start_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/AdminPageSize'
+      responses:
+        '200':
+          description: 审计日志分页列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessBase'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AuditLog'
+                      meta:
+                        $ref: '#/components/schemas/PaginatedMeta'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/notification-recipients:
+    get:
+      tags: [Admin]
+      summary: 查询每日邮件收件人
+      operationId: listNotificationRecipients
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/AdminPageSize'
+      responses:
+        '200':
+          description: 收件人分页列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessBase'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NotificationRecipient'
+                      meta:
+                        $ref: '#/components/schemas/PaginatedMeta'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      summary: 新增每日邮件收件人
+      operationId: createNotificationRecipient
+      security:
+        - adminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationRecipientRequest'
+      responses:
+        '201':
+          description: 收件人已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipientResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/notification-recipients/{recipient_id}:
+    patch:
+      tags: [Admin]
+      summary: 编辑每日邮件收件人
+      operationId: updateNotificationRecipient
+      security:
+        - adminBearer: []
+      parameters:
+        - name: recipient_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotificationRecipientRequest'
+      responses:
+        '200':
+          description: 收件人已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipientResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /admin/notification-runs:
+    get:
+      tags: [Admin]
+      summary: 查询每日邮件运行记录
+      operationId: listNotificationRuns
+      security:
+        - adminBearer: []
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/NotificationRunStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/AdminPageSize'
+      responses:
+        '200':
+          description: 邮件运行记录
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessBase'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NotificationRun'
+                      meta:
+                        $ref: '#/components/schemas/PaginatedMeta'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/notification-runs/{report_date}/retry:
+    post:
+      tags: [Admin]
+      summary: 手动补发指定日期每日邮件
+      operationId: retryNotificationRun
+      security:
+        - adminBearer: []
+      parameters:
+        - $ref: '#/components/parameters/ReportDate'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+      responses:
+        '202':
+          description: 已接受补发任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRunResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+components:
+  securitySchemes:
+    studentCookie:
+      type: apiKey
+      in: cookie
+      name: student_session
+      description: 服务端签发的学生不透明 Session Cookie
+    adminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth Access Token
+  parameters:
+    StudentId:
+      name: student_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ReportDate:
+      name: report_date
+      in: path
+      required: true
+      schema:
+        type: string
+        format: date
+    SearchQuery:
+      name: q
+      in: query
+      schema:
+        type: string
+        maxLength: 100
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    AdminPageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  requestBodies:
+    UpsertReport:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpsertReportRequest'
+  responses:
+    ValidationError:
+      description: 请求参数不正确
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AuthRequired:
+      description: 需要有效身份
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InvalidCredentials:
+      description: 用户名或密码错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: 无权执行操作
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: 唯一性或状态冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: 请求体超过安全上限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: 请求过于频繁
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: 建议重试等待秒数
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    SuccessBase:
+      type: object
+      properties:
+        data: {}
+        meta:
+          $ref: '#/components/schemas/Meta'
+    Meta:
+      type: object
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+    Pagination:
+      type: object
+      required: [page, page_size, total, total_pages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        total_pages:
+          type: integer
+          minimum: 0
+    PaginatedMeta:
+      allOf:
+        - $ref: '#/components/schemas/Meta'
+        - type: object
+          required: [pagination]
+          properties:
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+    ErrorDetail:
+      type: object
+      required: [reason]
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+            request_id:
+              type: string
+    StudentStatus:
+      type: string
+      enum: [active, disabled]
+    Evaluation:
+      type: string
+      enum: [satisfied, average, dissatisfied, other]
+    StudentSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    StudentProfile:
+      type: object
+      required:
+        - id
+        - name
+        - username
+        - email
+        - status
+        - must_change_password
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          $ref: '#/components/schemas/StudentStatus'
+        must_change_password:
+          type: boolean
+        last_login_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    StudentLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    StudentSession:
+      type: object
+      required: [authenticated, student, session]
+      properties:
+        authenticated:
+          type: boolean
+          const: true
+        student:
+          type: object
+          required: [id, name, username, must_change_password]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            username:
+              type: string
+            must_change_password:
+              type: boolean
+        session:
+          type: object
+          required: [expires_at]
+          properties:
+            expires_at:
+              type: string
+              format: date-time
+    StudentSessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/StudentSession'
+    DailyReport:
+      type: object
+      required:
+        - id
+        - student
+        - report_date
+        - self_evaluation
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        student:
+          $ref: '#/components/schemas/StudentSummary'
+        report_date:
+          type: string
+          format: date
+        self_evaluation:
+          $ref: '#/components/schemas/Evaluation'
+        today_summary:
+          type: [string, 'null']
+        tomorrow_plan:
+          type: [string, 'null']
+        other_notes:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DailyReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/DailyReport'
+    UpsertReportRequest:
+      type: object
+      additionalProperties: false
+      required: [self_evaluation]
+      properties:
+        self_evaluation:
+          $ref: '#/components/schemas/Evaluation'
+        today_summary:
+          type: [string, 'null']
+        tomorrow_plan:
+          type: [string, 'null']
+        other_notes:
+          type: [string, 'null']
+    Activity:
+      type: object
+      required: [date, report_id, self_evaluation]
+      properties:
+        date:
+          type: string
+          format: date
+        report_id:
+          type: [string, 'null']
+        self_evaluation:
+          oneOf:
+            - $ref: '#/components/schemas/Evaluation'
+            - type: 'null'
+    EvaluationSummary:
+      type: object
+      required: [submitted, satisfied, average, dissatisfied, other]
+      properties:
+        submitted:
+          type: integer
+          minimum: 0
+        satisfied:
+          type: integer
+          minimum: 0
+        average:
+          type: integer
+          minimum: 0
+        dissatisfied:
+          type: integer
+          minimum: 0
+        other:
+          type: integer
+          minimum: 0
+        missing_elapsed_days:
+          type: integer
+          minimum: 0
+    MonthlyStudentActivity:
+      type: object
+      required: [student, summary, activities]
+      properties:
+        student:
+          $ref: '#/components/schemas/StudentSummary'
+        summary:
+          $ref: '#/components/schemas/EvaluationSummary'
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+    MonthlyBoard:
+      type: object
+      required: [month, timezone, business_day_cutoff, students]
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+        timezone:
+          type: string
+          const: Asia/Shanghai
+        business_day_cutoff:
+          type: string
+          example: '03:00'
+        students:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthlyStudentActivity'
+    MonthlyBoardResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/MonthlyBoard'
+    ReportRangeItem:
+      type: object
+      required:
+        - id
+        - report_date
+        - self_evaluation
+        - today_summary
+        - tomorrow_plan
+        - other_notes
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: [string, 'null']
+        report_date:
+          type: string
+          format: date
+        self_evaluation:
+          oneOf:
+            - $ref: '#/components/schemas/Evaluation'
+            - type: 'null'
+        today_summary:
+          type: [string, 'null']
+        tomorrow_plan:
+          type: [string, 'null']
+        other_notes:
+          type: [string, 'null']
+        created_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+    StudentReportRangeData:
+      type: object
+      required: [student, range, summary, reports]
+      properties:
+        student:
+          $ref: '#/components/schemas/StudentSummary'
+        range:
+          type: object
+          required: [start_date, end_date]
+          properties:
+            start_date:
+              type: string
+              format: date
+            end_date:
+              type: string
+              format: date
+        summary:
+          $ref: '#/components/schemas/EvaluationSummary'
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportRangeItem'
+    StudentReportRangeResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/StudentReportRangeData'
+            meta:
+              $ref: '#/components/schemas/PaginatedMeta'
+    TodayReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: object
+              required: [business_date, report, prefill]
+              properties:
+                business_date:
+                  type: string
+                  format: date
+                report:
+                  oneOf:
+                    - $ref: '#/components/schemas/DailyReport'
+                    - type: 'null'
+                prefill:
+                  type: object
+                  required: [today_summary, tomorrow_plan, other_notes]
+                  properties:
+                    today_summary:
+                      type: string
+                    tomorrow_plan:
+                      type: string
+                    other_notes:
+                      type: string
+    AdminProfile:
+      type: object
+      required: [id, name, email, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, disabled]
+    AdminProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminProfile'
+    CreateStudentRequest:
+      type: object
+      additionalProperties: false
+      required: [name, username, email, temporary_password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        temporary_password:
+          type: string
+          minLength: 8
+        status:
+          $ref: '#/components/schemas/StudentStatus'
+    UpdateStudentRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        status:
+          $ref: '#/components/schemas/StudentStatus'
+    StudentProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/StudentProfile'
+    AdminStudentDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: object
+              required: [student, statistics]
+              properties:
+                student:
+                  $ref: '#/components/schemas/StudentProfile'
+                statistics:
+                  type: object
+                  required: [report_count, active_session_count]
+                  properties:
+                    report_count:
+                      type: integer
+                      minimum: 0
+                    active_session_count:
+                      type: integer
+                      minimum: 0
+    AuditActor:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    AuditLog:
+      type: object
+      required: [id, actor, action, change_summary, created_at]
+      properties:
+        id:
+          type: string
+        actor:
+          $ref: '#/components/schemas/AuditActor'
+        target_student:
+          oneOf:
+            - $ref: '#/components/schemas/StudentSummary'
+            - type: 'null'
+        action:
+          type: string
+          enum:
+            - student.created
+            - student.updated
+            - student.enabled
+            - student.disabled
+            - student.temporary_password_set
+            - student.sessions_revoked
+        change_summary:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    NotificationRecipient:
+      type: object
+      required: [id, email, display_name, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateNotificationRecipientRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          default: ''
+        enabled:
+          type: boolean
+          default: true
+    UpdateNotificationRecipientRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        enabled:
+          type: boolean
+    NotificationRecipientResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/NotificationRecipient'
+    NotificationRunStatus:
+      type: string
+      enum: [pending, running, succeeded, failed]
+    NotificationRun:
+      type: object
+      required:
+        - id
+        - report_date
+        - status
+        - attempt_count
+        - recipient_count
+        - created_at
+      properties:
+        id:
+          type: string
+        report_date:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/NotificationRunStatus'
+        attempt_count:
+          type: integer
+          minimum: 1
+        recipient_count:
+          type: integer
+          minimum: 0
+        error_summary:
+          type: [string, 'null']
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    NotificationRunResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              $ref: '#/components/schemas/NotificationRun'

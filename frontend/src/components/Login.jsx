@@ -19,20 +19,19 @@ function Login() {
     try {
       const response = await login(username, password);
 
-      // 确保后端返回的是 { success: true }
-      if (response.data?.success) {
-        navigate('/dashboard', { replace: true }); // 使用 replace 避免回退到登录页
-      } else {
-        setError(response.data?.message || '登录失败：用户名或密码错误');
-      }
+      const session = response.data?.data;
+      navigate(
+        session?.student?.must_change_password ? '/change-password' : '/dashboard',
+        { replace: true },
+      );
     } catch (err) {
       // 处理网络错误或 4xx/5xx 响应
       if (err.response) {
         // 服务器返回了响应（如 401, 500）
-        setError(err.response.data?.message || err.response.data?.error || '登录失败，请检查用户名和密码');
+        setError(err.response.data?.error?.message || '登录失败，请检查用户名和密码');
       } else if (err.request) {
         // 请求已发出，但无响应（如后端未启动）
-        setError('无法连接到服务器，请确保后端已启动（flask run）');
+        setError('无法连接到服务器，请稍后重试');
       } else {
         // 其他错误
         setError('发生未知错误：' + err.message);

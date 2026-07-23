@@ -1,430 +1,349 @@
-// frontend/src/components/Dashboard.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSession, logout, getStudents, getProgress, getProgressByDate, submitProgress } from '../services/api';
-import ProgressTable from './ProgressTable';
+import {
+  getMonthlyBoard,
+  getProgressByDate,
+  getSession,
+  getTodayReport,
+  logout,
+  submitProgress,
+} from '../services/api';
+import MonthActivityCalendar from './MonthActivityCalendar';
+
+const evaluationOptions = [
+  { value: 'satisfied', label: '满意' },
+  { value: 'average', label: '一般' },
+  { value: 'dissatisfied', label: '不满意' },
+  { value: 'other', label: '其他' },
+];
+
+const currentMonth = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(new Date()).slice(0, 7);
+
+const shiftMonth = (month, offset) => {
+  const [year, value] = month.split('-').map(Number);
+  const date = new Date(Date.UTC(year, value - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+const emptyForm = {
+  self_evaluation: 'satisfied',
+  today_summary: '',
+  tomorrow_plan: '',
+  other_notes: '',
+};
 
 function Dashboard() {
+  const [session, setSession] = useState(null);
+  const [month, setMonth] = useState(currentMonth);
+  const [board, setBoard] = useState([]);
+  const [query, setQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('board');
+  const [form, setForm] = useState(emptyForm);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [message, setMessage] = useState('');
   const navigate = useNavigate();
-  const [students, setStudents] = useState([]);
-  const [progressMap, setProgressMap] = useState({});
-  const [currentUser, setCurrentUser] = useState(null); // 存储当前登录用户信息
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formErrors, setFormErrors] = useState({});
-  const [todayData, setTodayData] = useState({
-    work_time: 8,
-    effective_time: 6,
-    main_work: '',
-    tomorrow_plan: '',
-    difficulty: '',
-  });
-  const [submitStatus, setSubmitStatus] = useState('');
-  const [toast, setToast] = useState({ visible: false, type: 'success', message: '' });
-  const [activeTab, setActiveTab] = useState('table'); // 'table' or 'form'
-
-  const SEPARATOR = '\n------\n';
-
-  const parseMainWork = (raw) => {
-    const idx = (raw || '').indexOf(SEPARATOR);
-    if (idx === -1) return { main_work: raw || '', tomorrow_plan: '' };
-    return {
-      main_work: raw.slice(0, idx),
-      tomorrow_plan: raw.slice(idx + SEPARATOR.length),
-    };
-  };
-
-  const getPrevDate = (dateStr) => {
-    const base = new Date(dateStr + 'T00:00:00Z');
-    base.setUTCDate(base.getUTCDate() - 1);
-    return base.toISOString().slice(0, 10);
-  };
-  const formatShanghaiDate = (d) =>
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(d);
-  const shiftDate = (dateStr, offsetDays) => {
-    const base = new Date(dateStr + 'T00:00:00Z');
-    base.setUTCDate(base.getUTCDate() + offsetDays);
-    return formatShanghaiDate(base);
-  };
-  // 以 Asia/Shanghai 时区、03:00 为切分的“今天”（避免使用 UTC 的 toISOString）
-  const computeAdjustedToday = () => {
-    const now = new Date();
-    const shanghaiHour = parseInt(
-      new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Shanghai',
-        hour: '2-digit',
-        hour12: false,
-      }).format(now),
-      10
-    );
-
-    if (shanghaiHour < 3) {
-      // 归属到“前一天”的上海日期
-      const shanghaiTodayStr = formatShanghaiDate(now);
-      const base = new Date(shanghaiTodayStr + 'T00:00:00Z'); // 以字符串构造可稳定减一天
-      const prev = new Date(base);
-      prev.setUTCDate(base.getUTCDate() - 1);
-      return formatShanghaiDate(prev);
-    }
-    return formatShanghaiDate(now);
-  };
-  const today = computeAdjustedToday();
-  const MAX_MAIN = 2000;
-  const MAX_DIFF = 2000;
-  const getDateRangeForPastThreeWeeks = (todayStr) => ({
-    startDate: shiftDate(todayStr, -20),
-    endDate: todayStr,
-  });
-  const [dateRange, setDateRange] = useState(() => getDateRangeForPastThreeWeeks(today));
-
-  // 当前用户 ID（从 session 获取）
-  const currentStudentId = currentUser ? currentUser.id : null;
 
   useEffect(() => {
-    const checkSessionAndLoadData = async () => {
-      try {
-        // 首先检查session并获取当前用户信息
-        const sessionRes = await getSession();
-        if (!sessionRes.data.logged_in) {
-          navigate('/');
+    getSession()
+      .then(({ data }) => {
+        const value = data.data;
+        if (value.student.must_change_password) {
+          navigate('/change-password', { replace: true });
           return;
         }
-        
-        // 设置当前用户信息
-        setCurrentUser(sessionRes.data.student);
+        setSession(value);
+      })
+      .catch(() => navigate('/', { replace: true }));
+  }, [navigate]);
 
-        // 加载学生列表
-        const sRes = await getStudents();
-        setStudents(sRes.data);
-
-        // 单独加载今日的完整数据用于表单填充（如果需要main_work和difficulty）
-        const studentId = sessionRes.data.student.id;
-        try {
-          const todayRes = await getProgressByDate(studentId, today);
-          const todayData_full = todayRes.data;
-          const parsed = parseMainWork(todayData_full.main_work);
-          setTodayData({
-            work_time: todayData_full.work_time || 8,
-            effective_time: todayData_full.effective_time || 6,
-            main_work: parsed.main_work,
-            tomorrow_plan: parsed.tomorrow_plan,
-            difficulty: todayData_full.difficulty || '',
-          });
-        } catch (err) {
-          // 今日无数据，尝试从昨天的明日计划中提取默认主要工作
-          const base = {
-            work_time: 8,
-            effective_time: 6,
-            main_work: '',
-            tomorrow_plan: '',
-            difficulty: '',
-          };
-          try {
-            const prevRes = await getProgressByDate(studentId, getPrevDate(today));
-            const prevParsed = parseMainWork(prevRes.data.main_work);
-            base.main_work = prevParsed.tomorrow_plan;
-          } catch (_) {
-            // 昨天也没有数据，保持空
-          }
-          setTodayData(base);
-        }
-      } catch (err) {
-        navigate('/');
+  const loadBoard = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await getMonthlyBoard(month, query);
+      setBoard(data.data.students);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        navigate('/', { replace: true });
+      } else {
+        setMessage(error.response?.data?.error?.message || '看板加载失败');
       }
-    };
-
-    checkSessionAndLoadData();
-  }, [navigate, today]);
+    } finally {
+      setLoading(false);
+    }
+  }, [month, query, navigate]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (session) loadBoard();
+  }, [session, loadBoard]);
 
-    const loadProgress = async () => {
-      try {
-        const pRes = await getProgress(dateRange.startDate, dateRange.endDate);
-        setProgressMap(pRes.data);
-      } catch (err) {
-        setProgressMap({});
-      }
-    };
+  useEffect(() => {
+    if (!session || activeTab !== 'form') return;
+    getTodayReport()
+      .then(({ data }) => {
+        const payload = data.data;
+        const source = payload.report || payload.prefill || emptyForm;
+        setForm({
+          self_evaluation: source.self_evaluation || 'satisfied',
+          today_summary: source.today_summary || '',
+          tomorrow_plan: source.tomorrow_plan || '',
+          other_notes: source.other_notes || '',
+        });
+      })
+      .catch(() => setMessage('今日日报加载失败'));
+  }, [session, activeTab]);
 
-    loadProgress();
-  }, [currentUser, dateRange.startDate, dateRange.endDate]);
+  const monthLabel = useMemo(() => {
+    const [year, value] = month.split('-');
+    return `${year} 年 ${Number(value)} 月`;
+  }, [month]);
+
+  const monthDays = useMemo(() => {
+    const [year, value] = month.split('-').map(Number);
+    const count = new Date(Date.UTC(year, value, 0)).getUTCDate();
+    return Array.from({ length: count }, (_, index) => index + 1);
+  }, [month]);
+
+  const handleDayClick = async (student, activity) => {
+    if (activity.openTimeline) {
+      navigate(`/people/${student.id}/reports`);
+      return;
+    }
+    setDetail(null);
+    setDetailLoading(true);
+    setMessage('');
+    try {
+      const { data } = await getProgressByDate(student.id, activity.date);
+      setDetail(data.data);
+    } catch {
+      setMessage('日报详情加载失败');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage('');
+    try {
+      await submitProgress(form);
+      setSaveSuccess(true);
+      await Promise.all([
+        loadBoard(),
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
+      setActiveTab('board');
+      setSaveSuccess(false);
+    } catch (error) {
+      setMessage(error.response?.data?.error?.message || '日报提交失败');
+      setSaveSuccess(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
-  };
-
-  const handleSubmit = async () => {
-    if (!currentStudentId) {
-      setSubmitStatus('用户信息未加载，请刷新页面重试');
-      return;
-    }
-
-    // 表单校验
-    const errors = {};
-    const { work_time, effective_time, main_work, tomorrow_plan, difficulty } = todayData;
-    if (typeof work_time !== 'number' || isNaN(work_time) || work_time < 0 || work_time > 24) {
-      errors.work_time = '工作时间需为0-24的数字';
-    }
-    if (typeof effective_time !== 'number' || isNaN(effective_time) || effective_time < 0 || effective_time > 24) {
-      errors.effective_time = '有效时间需为0-24的数字';
-    }
-    if ((main_work || '').length > MAX_MAIN) {
-      errors.main_work = `主要工作字数不能超过${MAX_MAIN}`;
-    }
-    if ((tomorrow_plan || '').length > MAX_MAIN) {
-      errors.tomorrow_plan = `明日计划字数不能超过${MAX_MAIN}`;
-    }
-    if ((difficulty || '').length > MAX_DIFF) {
-      errors.difficulty = `困难描述字数不能超过${MAX_DIFF}`;
-    }
-
-    setFormErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      setSubmitStatus('请修正表单错误后再提交');
-      return;
-    }
-
-    const merged_main_work = tomorrow_plan
-      ? main_work + SEPARATOR + tomorrow_plan
-      : main_work;
-
-    setSubmitStatus('提交中...');
-    setIsSubmitting(true);
-    try {
-      await submitProgress({
-        work_time,
-        effective_time,
-        main_work: merged_main_work,
-        difficulty,
-      });
-      setSubmitStatus('提交成功！');
-      setToast({ visible: true, type: 'success', message: '提交成功' });
-      setTimeout(() => setToast((t) => ({ ...t, visible: false })), 1800);
-      setTimeout(() => setSubmitStatus(''), 3000);
-
-      const pRes = await getProgress(dateRange.startDate, dateRange.endDate);
-      setProgressMap(pRes.data);
-
-      // 单独加载今日的完整数据用于更新表单状态
-      try {
-        const todayRes = await getProgressByDate(currentStudentId, today);
-        const updated = todayRes.data;
-        const parsed = parseMainWork(updated.main_work);
-        setTodayData({
-          work_time: updated.work_time || 8,
-          effective_time: updated.effective_time || 6,
-          main_work: parsed.main_work,
-          tomorrow_plan: parsed.tomorrow_plan,
-          difficulty: updated.difficulty || '',
-        });
-      } catch (err) {
-        // 如果加载失败，至少更新基本字段
-        const key = `${currentStudentId}_${today}`;
-        const updated = pRes.data[key];
-        if (updated) {
-          setTodayData((prev) => ({
-            ...prev,
-            work_time: updated.work_time || 8,
-            effective_time: updated.effective_time || 6,
-          }));
-        }
-      }
-    } catch (err) {
-      const msg = '提交失败：' + (err.response?.data?.error || '未知错误');
-      setSubmitStatus(msg);
-      setToast({ visible: true, type: 'error', message: msg });
-      setTimeout(() => setToast((t) => ({ ...t, visible: false })), 2200);
-    }
-    finally {
-      setIsSubmitting(false);
-    }
+    navigate('/', { replace: true });
   };
 
   return (
-    <div className={`container ${activeTab === 'table' ? 'container--left container--fluid' : ''}`}>
-      {/* Toast */}
-      {toast.visible && (
-        <div
-          role="status"
-          aria-live="polite"
-          className={`toast is-visible ${toast.type === 'success' ? 'toast--success' : 'toast--error'}`}
-        >
-          {toast.message}
+    <main className="container container--fluid">
+      <header className="navbar">
+        <div>
+          <h1 className="navbar-title">学生日报</h1>
+          {session && <span className="subtle">你好，{session.student.name}</span>}
         </div>
-      )}
-      {/* 导航栏 */}
-      <div className="navbar">
-        <h1 className="navbar-title">学生进度记录系统</h1>
         <div className="navbar-actions">
-          {currentUser && (
-            <span className="subtle mr-3">{currentUser.name} · {today}（统计时间 03:00 至次日 03:00）</span>
-          )}
-          <button onClick={handleLogout} className="btn btn--ghost">登出</button>
+          <button className="btn btn--ghost" onClick={() => navigate('/change-password')}>
+            修改密码
+          </button>
+          <button className="btn btn--ghost" onClick={handleLogout}>退出</button>
         </div>
-      </div>
+      </header>
 
-      {/* Tab 切换 */}
-      <div className="tabs mb-3">
+      <div className="tabs mb-4">
         <button
-          onClick={() => setActiveTab('table')}
-          className={`tab ${activeTab === 'table' ? 'is-active' : ''}`}
+          className={`tab ${activeTab === 'board' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('board')}
         >
-          查看进展表格
+          月度看板
         </button>
         <button
-          onClick={() => setActiveTab('form')}
           className={`tab ${activeTab === 'form' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('form')}
         >
-          填写今日进展
+          填写今日日报
         </button>
       </div>
 
-      {/* 表格标签页 */}
-      {activeTab === 'table' && (
-        <ProgressTable
-          students={students}
-          progressMap={progressMap}
-          dateRange={dateRange}
-          onDateRangeChange={setDateRange}
-        />
+      {message && <div className="notice mb-3">{message}</div>}
+
+      {activeTab === 'board' && (
+        <section>
+          <div className="board-toolbar">
+            <div className="month-nav">
+              <button className="btn btn--ghost" onClick={() => setMonth(shiftMonth(month, -1))}>
+                上个月
+              </button>
+              <strong>{monthLabel}</strong>
+              <button className="btn btn--ghost" onClick={() => setMonth(shiftMonth(month, 1))}>
+                下个月
+              </button>
+              <button className="btn btn--ghost" onClick={() => setMonth(currentMonth())}>
+                回到本月
+              </button>
+            </div>
+            <input
+              className="input board-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索学生姓名"
+            />
+          </div>
+
+          <div className="evaluation-legend">
+            {evaluationOptions.map((option) => (
+              <span key={option.value}>
+                <i className={`legend-dot evaluation-${option.value}`} />
+                {option.label}
+              </span>
+            ))}
+            <span><i className="legend-dot evaluation-missing" />未提交</span>
+          </div>
+
+          {loading ? (
+            <p className="text-muted">正在加载看板...</p>
+          ) : (
+            <div className="activity-board-scroll">
+              <div className="activity-card-list">
+                {!!board.length && (
+                  <div
+                    className="activity-table-header"
+                    style={{ '--activity-days': monthDays.length }}
+                    aria-hidden="true"
+                  >
+                    <span className="activity-table-header__name">学生</span>
+                    <div className="activity-table-header__days">
+                      {monthDays.map((day) => (
+                        <span key={day}>{day % 5 === 1 ? day : ''}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {board.map((item) => (
+                  <MonthActivityCalendar
+                    key={item.student.id}
+                    student={item.student}
+                    activities={item.activities}
+                    onDayClick={(activity) => handleDayClick(item.student, activity)}
+                  />
+                ))}
+                {!board.length && <p className="text-muted">没有匹配的学生。</p>}
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
-      {/* 填写进展标签页 */}
       {activeTab === 'form' && (
-        <div className="section narrow">
-          <h2 className="heading">填写今日进展（统计时间 03:00 至次日 03:00）</h2>
-          <form className="grid">
-            <div className="grid grid--2cols">
-              <div className="form-row">
-                <label className="label">工作时间（小时）：</label>
-                <input
-                  type="number"
-                  value={todayData.work_time}
-                  onChange={(e) =>
-                    setTodayData({
-                      ...todayData,
-                      work_time: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  min="0"
-                  max="24"
-                  className={`input input--xs ${formErrors.work_time ? 'is-invalid' : ''}`}
-                  aria-invalid={!!formErrors.work_time}
-                  aria-describedby={formErrors.work_time ? 'err-work-time' : undefined}
-                />
-                {formErrors.work_time && (
-                  <span id="err-work-time" className="field-error ml-2">{formErrors.work_time}</span>
-                )}
-              </div>
-              <div className="form-row">
-                <label className="label">有效时间（小时）：</label>
-                <input
-                  type="number"
-                  value={todayData.effective_time}
-                  onChange={(e) =>
-                    setTodayData({
-                      ...todayData,
-                      effective_time: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  min="0"
-                  max="24"
-                  className={`input input--xs ${formErrors.effective_time ? 'is-invalid' : ''}`}
-                  aria-invalid={!!formErrors.effective_time}
-                  aria-describedby={formErrors.effective_time ? 'err-effective-time' : undefined}
-                />
-                {formErrors.effective_time && (
-                  <span id="err-effective-time" className="field-error ml-2">{formErrors.effective_time}</span>
-                )}
-              </div>
-            </div>
-            
-            <div className="form-group">
-              <label className="label">主要工作（≤2000字）：</label>
+        <section className="section narrow">
+          <h2 className="heading">填写今日日报</h2>
+          <form className="report-form" onSubmit={handleSubmit}>
+            <fieldset className="evaluation-picker">
+              <legend className="label">自我评价</legend>
+              {evaluationOptions.map((option) => (
+                <label key={option.value} className={`evaluation-option evaluation-${option.value}`}>
+                  <input
+                    type="radio"
+                    name="self_evaluation"
+                    checked={form.self_evaluation === option.value}
+                    onChange={() => setForm({ ...form, self_evaluation: option.value })}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </fieldset>
+            <label className="label">
+              今日总结
               <textarea
-                value={todayData.main_work}
-                onChange={(e) =>
-                  setTodayData({ ...todayData, main_work: e.target.value })
-                }
-                rows="6"
-                className={`input ${formErrors.main_work ? 'is-invalid' : ''}`}
-                placeholder="请描述今天的主要工作内容..."
-                maxLength={MAX_MAIN}
-                aria-invalid={!!formErrors.main_work}
-                aria-describedby={formErrors.main_work ? 'err-main-work' : undefined}
+                className="input"
+                rows="7"
+                value={form.today_summary}
+                onChange={(event) => setForm({ ...form, today_summary: event.target.value })}
               />
-              <div className="text-muted mt-1">{todayData.main_work.length}/{MAX_MAIN}</div>
-              {formErrors.main_work && (
-                <div id="err-main-work" className="field-error mt-1">{formErrors.main_work}</div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="label">明日计划（≤2000字）：</label>
+            </label>
+            <label className="label">
+              明日计划
               <textarea
-                value={todayData.tomorrow_plan}
-                onChange={(e) =>
-                  setTodayData({ ...todayData, tomorrow_plan: e.target.value })
-                }
-                rows="6"
-                className={`input ${formErrors.tomorrow_plan ? 'is-invalid' : ''}`}
-                placeholder="请描述明天的工作计划..."
-                maxLength={MAX_MAIN}
-                aria-invalid={!!formErrors.tomorrow_plan}
-                aria-describedby={formErrors.tomorrow_plan ? 'err-tomorrow-plan' : undefined}
+                className="input"
+                rows="7"
+                value={form.tomorrow_plan}
+                onChange={(event) => setForm({ ...form, tomorrow_plan: event.target.value })}
               />
-              <div className="text-muted mt-1">{todayData.tomorrow_plan.length}/{MAX_MAIN}</div>
-              {formErrors.tomorrow_plan && (
-                <div id="err-tomorrow-plan" className="field-error mt-1">{formErrors.tomorrow_plan}</div>
-              )}
-            </div>
-            
-            <div className="form-group">
-              <label className="label">遇到的困难（≤2000字）：</label>
+            </label>
+            <label className="label">
+              其他说明
               <textarea
-                value={todayData.difficulty}
-                onChange={(e) =>
-                  setTodayData({ ...todayData, difficulty: e.target.value })
-                }
-                rows="6"
-                className={`input ${formErrors.difficulty ? 'is-invalid' : ''}`}
-                placeholder="请描述遇到的问题或困难..."
-                maxLength={MAX_DIFF}
-                aria-invalid={!!formErrors.difficulty}
-                aria-describedby={formErrors.difficulty ? 'err-difficulty' : undefined}
+                className="input"
+                rows="7"
+                value={form.other_notes}
+                onChange={(event) => setForm({ ...form, other_notes: event.target.value })}
+                placeholder="遇到的困难、需要的支持或其他备注"
               />
-              <div className="text-muted mt-1">{todayData.difficulty.length}/{MAX_DIFF}</div>
-              {formErrors.difficulty && (
-                <div id="err-difficulty" className="field-error mt-1">{formErrors.difficulty}</div>
-              )}
-            </div>
-            
-            <div className="form-group">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                className={`btn btn--primary ${isSubmitting ? 'is-loading' : ''}`}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? '正在提交...' : '提交今日进展'}
-              </button>
-              {submitStatus && (
-                <p className={`${submitStatus.includes('成功') ? 'text-success' : submitStatus.includes('提交中') ? 'text-muted' : 'text-danger'} mt-2`}>
-                  {submitStatus}
-                </p>
-              )}
-            </div>
+            </label>
+            <button className="btn btn--primary" type="submit" disabled={submitting}>
+              {submitting ? '正在保存…' : '保存日报'}
+            </button>
           </form>
+        </section>
+      )}
+
+      {saveSuccess && (
+        <div className="success-popup" role="status" aria-live="polite">
+          <div className="success-popup__icon">✓</div>
+          <strong>保存成功</strong>
+          <span>即将返回月度看板…</span>
         </div>
       )}
-    </div>
+
+      {detailLoading && (
+        <div className="modalOverlay" role="status" aria-live="polite">
+          <div className="detail-loading">
+            <span className="detail-loading__spinner" aria-hidden="true" />
+            <strong>正在加载日报详情</strong>
+            <span>请稍候…</span>
+          </div>
+        </div>
+      )}
+
+      {detail && (
+        <div className="modalOverlay" onClick={() => setDetail(null)}>
+          <article className="modalContent report-detail" onClick={(event) => event.stopPropagation()}>
+            <button className="modalClose" onClick={() => setDetail(null)} aria-label="关闭">×</button>
+            <h2>{detail.student.name} · {detail.report_date}</h2>
+            <p><strong>自我评价：</strong>{
+              evaluationOptions.find((item) => item.value === detail.self_evaluation)?.label
+            }</p>
+            <h3>今日总结</h3>
+            <p className="pre-wrap">{detail.today_summary || '无'}</p>
+            <h3>明日计划</h3>
+            <p className="pre-wrap">{detail.tomorrow_plan || '无'}</p>
+            <h3>其他说明</h3>
+            <p className="pre-wrap">{detail.other_notes || '无'}</p>
+          </article>
+        </div>
+      )}
+    </main>
   );
 }
 

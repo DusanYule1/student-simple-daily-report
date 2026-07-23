@@ -1,0 +1,23 @@
+{
+  "name": "student-simple-daily-report",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "typecheck": "tsc --noEmit",
+    "test:server": "node --test --import tsx server/test/time.test.ts server/test/security.test.ts server/test/http.test.ts server/test/contract.test.ts server/test/migrations.test.ts",
+    "bootstrap:admin": "tsx scripts/bootstrap-admin.mts",
+    "dev:local": "node --env-file=.env --import tsx scripts/dev-server.mts",
+    "serve:build": "node scripts/serve-build.mjs"
+  },
+  "dependencies": {
+    "@netlify/functions": "^4.2.5",
+    "@supabase/supabase-js": "^2.57.4",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
