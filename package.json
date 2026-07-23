@@ -5,7 +5,7 @@
   "scripts": {
     "build": "npm --prefix frontend run build",
     "typecheck": "tsc --noEmit",
-    "test:server": "node --test --import tsx server/test/time.test.ts server/test/security.test.ts server/test/http.test.ts server/test/contract.test.ts server/test/migrations.test.ts",
+    "test:server": "node --test --import tsx server/test/time.test.ts server/test/security.test.ts server/test/http.test.ts server/test/contract.test.ts server/test/migrations.test.ts server/test/monthlyBoardCache.test.ts",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.mts",
     "dev:local": "node --env-file=.env --import tsx scripts/dev-server.mts",
     "serve:build": "node scripts/serve-build.mjs"

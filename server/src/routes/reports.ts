@@ -4,6 +4,7 @@ import { badRequest, notFound } from '../errors';
 import { json, parseJson, positiveIntegerParam } from '../http';
 import { authenticateStudent } from '../security/session';
 import { authenticateViewer } from '../security/viewer';
+import { clearMonthlyBoardCache } from '../services/monthlyBoardCache';
 import { businessDate } from '../time';
 
 const reportSchema = z.object({
@@ -132,6 +133,7 @@ const upsertReportForDate = async (
     .select(reportSelect)
     .single();
   if (error) throw error;
+  clearMonthlyBoardCache();
   return json(serializeReport(data), id, existing ? 200 : 201);
 };
 

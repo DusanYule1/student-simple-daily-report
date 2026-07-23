@@ -2,6 +2,11 @@ import { getDb } from '../db';
 import { badRequest } from '../errors';
 import { json } from '../http';
 import { authenticateViewer } from '../security/viewer';
+import {
+  getCachedMonthlyBoard,
+  monthlyBoardCacheKey,
+  setCachedMonthlyBoard,
+} from '../services/monthlyBoardCache';
 import { businessDate, datesInMonth, monthBounds } from '../time';
 
 type Evaluation = 'satisfied' | 'average' | 'dissatisfied' | 'other';
@@ -40,6 +45,15 @@ export const getMonthlyBoard = async (
   }
 
   const search = url.searchParams.get('q')?.trim() || null;
+  const cacheKey = monthlyBoardCacheKey(month, search);
+  const cached = getCachedMonthlyBoard<Record<string, unknown>>(cacheKey);
+  if (cached) {
+    return json(cached, id, 200, {}, {
+      'Cache-Control': 'private, max-age=30',
+      'X-Board-Cache': 'HIT',
+    });
+  }
+
   const { data, error } = await getDb().rpc('get_monthly_board', {
     p_month_start: bounds.start,
     p_next_month_start: bounds.next,
@@ -82,10 +96,16 @@ export const getMonthlyBoard = async (
     };
   });
 
-  return json({
+  const result = {
     month,
     timezone: 'Asia/Shanghai',
     business_day_cutoff: '03:00',
     students,
-  }, id, 200, {}, { 'Cache-Control': 'private, max-age=30' });
+  };
+  setCachedMonthlyBoard(cacheKey, result);
+
+  return json(result, id, 200, {}, {
+    'Cache-Control': 'private, max-age=30',
+    'X-Board-Cache': 'MISS',
+  });
 };

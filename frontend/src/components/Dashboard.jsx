@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getMonthlyBoard,
@@ -37,11 +37,54 @@ const emptyForm = {
   other_notes: '',
 };
 
+const BOARD_CACHE_PREFIX = 'student-daily-report:board:';
+const BOARD_CACHE_TTL_MS = 60_000;
+
+const boardCacheKey = (month, query) =>
+  `${BOARD_CACHE_PREFIX}${month}:${query.trim().toLocaleLowerCase()}`;
+
+const readBoardCache = (month, query) => {
+  try {
+    const raw = sessionStorage.getItem(boardCacheKey(month, query));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (Date.now() - cached.savedAt > BOARD_CACHE_TTL_MS) {
+      sessionStorage.removeItem(boardCacheKey(month, query));
+      return null;
+    }
+    return cached.students;
+  } catch {
+    return null;
+  }
+};
+
+const writeBoardCache = (month, query, students) => {
+  try {
+    sessionStorage.setItem(boardCacheKey(month, query), JSON.stringify({
+      savedAt: Date.now(),
+      students,
+    }));
+  } catch {
+    // Storage may be unavailable in privacy modes; network loading still works.
+  }
+};
+
+const clearBoardCache = () => {
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(BOARD_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key));
+  } catch {
+    // Ignore unavailable storage.
+  }
+};
+
 function Dashboard() {
   const [session, setSession] = useState(null);
   const [month, setMonth] = useState(currentMonth);
   const [board, setBoard] = useState([]);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [activeTab, setActiveTab] = useState('board');
   const [form, setForm] = useState(emptyForm);
   const [detail, setDetail] = useState(null);
@@ -50,6 +93,7 @@ function Dashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [message, setMessage] = useState('');
+  const boardRequestId = useRef(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -65,21 +109,36 @@ function Dashboard() {
       .catch(() => navigate('/', { replace: true }));
   }, [navigate]);
 
-  const loadBoard = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  const loadBoard = useCallback(async ({ force = false } = {}) => {
+    const requestId = ++boardRequestId.current;
+    const cached = force ? null : readBoardCache(month, debouncedQuery);
+    if (cached) {
+      setBoard(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const { data } = await getMonthlyBoard(month, query);
+      const { data } = await getMonthlyBoard(month, debouncedQuery);
+      if (requestId !== boardRequestId.current) return;
       setBoard(data.data.students);
+      writeBoardCache(month, debouncedQuery, data.data.students);
     } catch (error) {
+      if (requestId !== boardRequestId.current) return;
       if (error.response?.status === 401) {
         navigate('/', { replace: true });
       } else {
         setMessage(error.response?.data?.error?.message || '看板加载失败');
       }
     } finally {
-      setLoading(false);
+      if (requestId === boardRequestId.current) setLoading(false);
     }
-  }, [month, query, navigate]);
+  }, [month, debouncedQuery, navigate]);
 
   useEffect(() => {
     if (session) loadBoard();
@@ -137,8 +196,9 @@ function Dashboard() {
     try {
       await submitProgress(form);
       setSaveSuccess(true);
+      clearBoardCache();
       await Promise.all([
-        loadBoard(),
+        loadBoard({ force: true }),
         new Promise((resolve) => setTimeout(resolve, 1000)),
       ]);
       setActiveTab('board');
