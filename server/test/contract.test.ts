@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { route } from '../src/router';
 
-process.env.SUPABASE_URL = 'https://contract-test.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'contract-test-service-role-key';
+// The local-mode admin session route only exists without Supabase credentials.
+process.env.SUPABASE_URL = '';
+process.env.SUPABASE_SERVICE_ROLE_KEY = '';
 
 type Operation = { method: string; path: string };
 
@@ -33,7 +34,7 @@ const concretePath = (path: string) => path
 
 test('every documented OpenAPI operation is recognized by the router', async () => {
   const operations = openApiOperations();
-  assert.equal(operations.length, 25);
+  assert.equal(operations.length, 26);
 
   for (const operation of operations) {
     const response = await route(new Request(

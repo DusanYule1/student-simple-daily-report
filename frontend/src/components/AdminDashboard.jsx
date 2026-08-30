@@ -10,7 +10,7 @@ import {
   retryNotificationRun,
   updateAdminStudent,
 } from '../services/api';
-import { supabase } from '../services/supabase';
+import { isAdminLocalMode, localAdminLogout, supabase } from '../services/supabaseLocal';
 
 const messageOf = (error) =>
   error.response?.data?.error?.message || error.message || '操作失败';
@@ -42,7 +42,8 @@ export default function AdminDashboard() {
       setError('');
     } catch (requestError) {
       if (requestError.response?.status === 401 || requestError.response?.status === 403) {
-        await supabase?.auth.signOut();
+        if (isAdminLocalMode) localAdminLogout();
+        else await supabase?.auth.signOut();
         navigate('/admin/login', { replace: true });
         return;
       }
@@ -103,7 +104,9 @@ export default function AdminDashboard() {
       <header className="admin-header">
         <div><h1>系统管理</h1><span className="muted">{admin?.name} · {admin?.email}</span></div>
         <button className="btn btn--ghost" onClick={async () => {
-          await supabase.auth.signOut(); navigate('/admin/login', { replace: true });
+          if (isAdminLocalMode) localAdminLogout();
+          else await supabase?.auth.signOut();
+          navigate('/admin/login', { replace: true });
         }}>退出</button>
       </header>
       {error && <div className="alert alert--error">{error}</div>}

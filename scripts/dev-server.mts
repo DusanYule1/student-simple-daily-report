@@ -1,7 +1,13 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { extname, join, normalize } from 'node:path';
+import { ensureLocalDatabase } from '../server/src/local/bootstrap';
 import { route } from '../server/src/router';
+
+ensureLocalDatabase().catch((error) => {
+  console.error('本地数据库初始化失败:', error);
+  process.exit(1);
+});
 
 const root = join(process.cwd(), 'frontend', 'build');
 const port = Number(process.env.PORT || 8888);

@@ -1,15 +1,12 @@
-// frontend/src/services/api.js
 import axios from 'axios';
 import { apiBaseUrl } from '../config';
-import { supabase } from './supabase';
+import { isAdminAuthConfigured, supabase } from './supabase';
 
-// ✅ 创建一个 axios 实例，启用 withCredentials
 const api = axios.create({
   baseURL: apiBaseUrl,
-  withCredentials: true  // ✅ 关键：允许携带 cookie
+  withCredentials: true,
 });
 
-// ✅ 所有请求都使用这个实例
 export const login = (username, password) =>
   api.post('/student/session', { username, password });
 
@@ -37,9 +34,45 @@ export const submitProgress = (data) =>
 export const getStudentReportRange = (studentId, params) =>
   api.get(`/students/${studentId}/reports`, { params });
 
+// ---------------------------------------------------------------------------
+// Admin auth: Supabase Auth in production, local /admin/session in local mode.
+// ---------------------------------------------------------------------------
+
+export const isAdminLocalMode = !isAdminAuthConfigured;
+
+const LOCAL_ADMIN_TOKEN_KEY = 'local_admin_token';
+
+export const getLocalAdminToken = (): string | null =>
+  (typeof window !== 'undefined' && window.localStorage.getItem(LOCAL_ADMIN_TOKEN_KEY)) || null;
+
+export const storeLocalAdminToken = (token: string) => {
+  window.localStorage.setItem(LOCAL_ADMIN_TOKEN_KEY, token);
+};
+
+export const clearLocalAdminToken = () => {
+  window.localStorage.removeItem(LOCAL_ADMIN_TOKEN_KEY);
+};
+
+export const localAdminLogin = async (email: string, password: string) => {
+  const response = await axios.post(`${apiBaseUrl}/admin/session`, { email, password });
+  storeLocalAdminToken(response.data.data.token);
+  return response;
+};
+
+export const localAdminLogout = () => {
+  clearLocalAdminToken();
+};
+
 export const adminApi = axios.create({ baseURL: apiBaseUrl });
 
 adminApi.interceptors.request.use(async (config) => {
+  if (isAdminLocalMode) {
+    const token = getLocalAdminToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  }
   if (!supabase) return config;
   const { data } = await supabase.auth.getSession();
   if (data.session?.access_token) {
@@ -47,6 +80,19 @@ adminApi.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+adminApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (isAdminLocalMode && error.response?.status === 401) {
+      clearLocalAdminToken();
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+        window.location.href = '/admin/login';
+      }
+    }
+    throw error;
+  },
+);
 
 export const getAdminMe = () => adminApi.get('/admin/me');
 export const listAdminStudents = (params) => adminApi.get('/admin/students', { params });

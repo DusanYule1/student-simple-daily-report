@@ -334,6 +334,28 @@ paths:
           $ref: '#/components/responses/AuthRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /admin/session:
+    post:
+      tags: [Admin]
+      summary: 本地模式管理员登录（仅本地 SQLite 预览环境）
+      operationId: createLocalAdminSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalAdminSessionRequest'
+      responses:
+        '200':
+          description: 本地管理员登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalAdminSessionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthRequired'
   /admin/me:
     get:
       tags: [Admin]
@@ -1262,6 +1284,31 @@ components:
         status:
           type: string
           enum: [active, disabled]
+    LocalAdminSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+    LocalAdminSessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: object
+              required: [token, admin]
+              properties:
+                token:
+                  type: string
+                admin:
+                  $ref: '#/components/schemas/AdminProfile'
     AdminProfileResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessBase'

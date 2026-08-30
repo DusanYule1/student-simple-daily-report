@@ -149,6 +149,62 @@ http://127.0.0.1:8888
 npx netlify dev
 ```
 
+## 本地零依赖预览（无需 Supabase / Netlify）
+
+本分支提供完全本地的运行模式：不依赖 Docker、不注册 Supabase/Resend 账号，把 Supabase 数据库调用映射到 Node.js 内置 SQLite。
+
+```bash
+npm install
+npm --prefix frontend ci
+npm run build        # 前端只构建一次
+npm run seed:local   # 初始化本地 SQLite 数据库（也可直接跑 dev:local，会自动初始化）
+npm run dev:local
+```
+
+访问 `http://127.0.0.1:8888`，前后端与 API 全部走同一个端口，适合通过端口转发（例如 SSH `-L 8888:127.0.0.1:8888`）直接使用。
+
+### 本地预览账号
+
+- 管理员：`admin@example.com` / `local-admin-123`（可用环境变量 `LOCAL_ADMIN_PASSWORD` 覆盖）
+- 学生：`zhangwei` / `lina` / `wangqiang`，密码均为 `student-123456`；`liuyang` 为停用状态演示账号
+
+种子数据包含过去两周的日报，打开月度看板即可看到完整热力图效果。
+
+### 本地预览的数据文件
+
+- 数据库：`instance/local-preview.sqlite3`（可用 `LOCAL_SQLITE_DB` 覆盖路径）
+- 每日邮件预览：`instance/local-preview.sqlite3.mail/<日期>.html`——本地模式没有 Resend，"发送"会落盘为 HTML 文件，管理后台的发送记录与手动补发流程照常可走
+
+### 本地发送真实邮件（QQ 邮箱 SMTP）
+
+发送渠道按以下优先级自动选择：`RESEND_API_KEY`（Resend）> `SMTP_*`（SMTP 直发）> 本地落盘预览。
+
+用 QQ 邮箱（含 Foxmail 账号）发真实邮件的配置步骤：
+
+1. 登录 QQ 邮箱网页版 → 设置 → 账户 → 找到「POP3/IMAP/SMTP 服务」→ 开启「IMAP/SMTP 服务」→ 按提示生成**授权码**（16 位字母，不是 QQ 密码）
+2. 在项目根目录创建 `.env`：
+
+```dotenv
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=你的QQ号@qq.com
+SMTP_PASS=上面生成的授权码
+SMTP_FROM=日报系统 <你的QQ号@qq.com>
+```
+
+3. `npm run dev:local` 重启服务
+4. 管理后台把每个启用学生的邮箱改成真实邮箱 → 「日报邮件补发」→ 收件箱查收
+
+Foxmail 客户端绑定的是同一邮箱账号，不影响以上配置；授权码才是 SMTP 登录凭据。
+
+### 工作方式
+
+- 未配置 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 时，服务端 `getDb()` 自动切换到 SQLite 适配层（`server/src/local/`），业务代码零改动
+- 配置了 Supabase 环境变量后，一切走原来的 Supabase 路径，本地适配层自动退出，Netlify 生产部署不受影响
+- 管理员登录在本地模式走 `POST /api/v1/admin/session`（生产为 Supabase Auth）
+- 本地模式仅供功能预览与联调，不应承载真实生产数据
+
 ## 数据库初始化
 
 在 Supabase SQL Editor 中按文件名顺序执行：
