@@ -33,6 +33,8 @@ import {
   updateNotificationRecipient,
 } from './routes/adminNotifications';
 import { listAdminAuditLogs } from './routes/adminAudit';
+import { loginLocalAdmin } from './routes/localAdmin';
+import { isLocalMode } from './local/bootstrap';
 
 const apiPath = (request: Request): string => {
   const path = new URL(request.url).pathname;
@@ -48,6 +50,9 @@ export const route = async (request: Request): Promise<Response> => {
   const method = request.method.toUpperCase();
 
   try {
+    if (isLocalMode() && path === '/admin/session' && method === 'POST') {
+      return await loginLocalAdmin(request);
+    }
     if (path === '/student/session' && method === 'POST') {
       return await loginStudent(request, id);
     }

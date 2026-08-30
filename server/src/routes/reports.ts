@@ -248,9 +248,9 @@ export const listStudentReports = async (
     dissatisfied: 0,
     other: 0,
   });
-  let allRows: Array<Record<string, unknown>> = submittedRows;
+  let allRows: Array<any> = submittedRows;
   if (includeMissing) {
-    const byDate = new Map(submittedRows.map((report) => [report.report_date, report]));
+    const byDate = new Map(submittedRows.map((report: any) => [report.report_date, report]));
     const dates: string[] = [];
     const cursor = new Date(`${startDate}T00:00:00Z`);
     const end = new Date(`${endDate}T00:00:00Z`);

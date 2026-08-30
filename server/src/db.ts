@@ -1,9 +1,16 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from './config';
+import { getLocalClient, getLocalDb, isLocalMode } from './local/bootstrap';
+import type { LocalSupabaseClient } from './local/supabaseShim';
+
+export type AppDbClient = SupabaseClient | LocalSupabaseClient;
 
 let client: SupabaseClient | undefined;
 
-export const getDb = (): SupabaseClient => {
+export const getDb = (): AppDbClient => {
+  if (isLocalMode()) {
+    return getLocalClient();
+  }
   if (!client) {
     const config = getConfig();
     client = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
@@ -21,3 +28,5 @@ export const getDb = (): SupabaseClient => {
   return client;
 };
 
+// Keep the sqlite handle reachable for local-only callers (tests, dev server).
+export const getLocalDatabase = getLocalDb;

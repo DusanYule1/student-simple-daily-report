@@ -1,5 +1,33 @@
 import { getDb } from '../db';
 import { ApiError } from '../errors';
+import {
+  resolveMailChannel,
+  sendViaSmtp,
+  writeMailPreview,
+} from './smtpSender';
+
+const deliverMail = async (
+  recipients: string[],
+  subject: string,
+  html: string,
+  reportDate: string,
+): Promise<void> => {
+  const channel = resolveMailChannel();
+  if (channel === 'smtp') {
+    await sendViaSmtp(recipients, subject, html);
+    console.log(`[smtp-mail] 已通过 SMTP 发送 ${recipients.length} 封日报邮件`);
+    return;
+  }
+  if (channel === 'resend') {
+    await sendResendBatch(recipients, subject, html, reportDate);
+    return;
+  }
+  if (channel === 'local-preview') {
+    writeMailPreview(reportDate, recipients, subject, html);
+    return;
+  }
+  throw new Error('未配置邮件发送渠道（RESEND_API_KEY 或 SMTP_*）');
+};
 
 const sendResendBatch = async (
   recipients: string[],
@@ -92,13 +120,13 @@ export const sendDailyReportMail = async (reportDate: string) => {
     if (studentsError) throw studentsError;
     if (reportsError) throw reportsError;
     if (!students?.length) throw new Error('没有启用的学生，无法发送每日邮件');
-    const missingEmailStudents = students.filter((student) => !student.email);
+    const missingEmailStudents = students.filter((student: any) => !student.email);
     if (missingEmailStudents.length) {
       throw new Error(
-        `以下启用学生缺少邮箱：${missingEmailStudents.map((student) => student.name).join('、')}`,
+        `以下启用学生缺少邮箱：${missingEmailStudents.map((student: any) => student.name).join('、')}`,
       );
     }
-    const recipients = students.map((student) => student.email as string);
+    const recipients = students.map((student: any) => student.email as string);
 
     const counts = { satisfied: 0, average: 0, dissatisfied: 0, other: 0 };
     for (const report of reports || []) {
@@ -121,7 +149,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
       不满意 ${counts.dissatisfied}，其他 ${counts.other}。</p>
       <h3>日报详情</h3><ul>${details || '<li>当日无人提交</li>'}</ul>`;
 
-    await sendResendBatch(
+    await deliverMail(
       recipients,
       `${reportDate} 学习进度日报`,
       html,
