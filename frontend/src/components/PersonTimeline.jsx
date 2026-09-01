@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import ContributionHeatmap from './ContributionHeatmap';
 import { getStudentReportRange } from '../services/api';
 
 const isoDate = (date) => date.toISOString().slice(0, 10);
-const daysAgo = (days) => {
+const monthsAgo = (months) => {
   const date = new Date();
-  date.setDate(date.getDate() - days);
+  date.setMonth(date.getMonth() - months);
   return isoDate(date);
 };
 
@@ -20,7 +21,7 @@ const labels = {
 function PersonTimeline() {
   const { studentId } = useParams();
   const navigate = useNavigate();
-  const [startDate, setStartDate] = useState(daysAgo(29));
+  const [startDate, setStartDate] = useState(monthsAgo(3));
   const [endDate, setEndDate] = useState(isoDate(new Date()));
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -78,6 +79,8 @@ function PersonTimeline() {
           </div>
         )}
       </section>
+
+      {data && <ContributionHeatmap reports={data.reports} />}
 
       {error && <p className="text-danger">{error}</p>}
       {loading ? <p className="text-muted">正在加载...</p> : (
