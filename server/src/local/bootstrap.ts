@@ -13,6 +13,46 @@ import {
 import { hashPassword } from '../security/password';
 
 const DEFAULT_DB_FILE = 'instance/local-preview.sqlite3';
+
+// SQLite CHECK constraints cannot be altered in place; rebuild daily_reports
+// when it predates the 'very_satisfied' evaluation (idempotent table swap).
+const migrateDailyReportsEvaluation = (database: DatabaseSync): void => {
+  const info = database.prepare(
+    "select sql from sqlite_master where type = 'table' and name = 'daily_reports'",
+  ).get() as { sql: string } | undefined;
+  if (!info?.sql) return;
+  if (info.sql.includes("'very_satisfied'")) return;
+
+  database.exec('pragma foreign_keys = off;');
+  try {
+    database.exec('begin;');
+    database.exec(`
+      create table daily_reports_new (
+        id text primary key,
+        student_id text not null references students(id) on delete restrict,
+        report_date text not null,
+        self_evaluation text not null check (self_evaluation in ('very_satisfied', 'satisfied', 'average', 'dissatisfied', 'other')),
+        today_summary text,
+        tomorrow_plan text,
+        other_notes text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        constraint uq_daily_reports_student_date unique (student_id, report_date)
+      );
+      insert into daily_reports_new (id, student_id, report_date, self_evaluation, today_summary, tomorrow_plan, other_notes, created_at, updated_at)
+        select id, student_id, report_date, self_evaluation, today_summary, tomorrow_plan, other_notes, created_at, updated_at from daily_reports;
+      drop table daily_reports;
+      alter table daily_reports_new rename to daily_reports;
+      create index if not exists idx_daily_reports_date_student on daily_reports (report_date, student_id);
+    `);
+    database.exec('commit;');
+  } catch (error) {
+    database.exec('rollback;');
+    throw error;
+  }
+  database.exec('pragma foreign_keys = on;');
+  console.log('[local-db] daily_reports 已迁移：支持 very_satisfied 评价');
+};
 export const LOCAL_ADMIN_EMAIL = 'admin@example.com';
 export const LOCAL_ADMIN_NAME = '系统管理员';
 export const DEFAULT_LOCAL_ADMIN_PASSWORD = 'local-admin-123';
@@ -41,6 +81,7 @@ export const getLocalClient = (): LocalSupabaseClient =>
 export const ensureLocalDatabase = async (): Promise<void> => {
   const database = getLocalDb();
   database.exec(readFileSync(join(__dirname, './schema.sql'), 'utf8'));
+  migrateDailyReportsEvaluation(database);
 
   const adminCount = database.prepare(
     'select count(*) as total from admin_profiles',

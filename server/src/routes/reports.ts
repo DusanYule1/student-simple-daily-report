@@ -9,6 +9,7 @@ import { businessDate } from '../time';
 
 const reportSchema = z.object({
   self_evaluation: z.enum([
+    'very_satisfied',
     'satisfied',
     'average',
     'dissatisfied',
@@ -243,6 +244,7 @@ export const listStudentReports = async (
     return acc;
   }, {
     submitted: 0,
+    very_satisfied: 0,
     satisfied: 0,
     average: 0,
     dissatisfied: 0,

@@ -76,6 +76,7 @@ const renderText = (value: unknown): string =>
   escapeHtml(value || '无').replaceAll('\n', '<br>');
 
 const labels: Record<string, string> = {
+  very_satisfied: '很满意',
   satisfied: '满意',
   average: '一般',
   dissatisfied: '不满意',
@@ -128,7 +129,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
     }
     const recipients = students.map((student: any) => student.email as string);
 
-    const counts = { satisfied: 0, average: 0, dissatisfied: 0, other: 0 };
+    const counts = { very_satisfied: 0, satisfied: 0, average: 0, dissatisfied: 0, other: 0 };
     for (const report of reports || []) {
       counts[report.self_evaluation as keyof typeof counts] += 1;
     }
@@ -145,7 +146,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
     }).join('');
     const html = `<h2>${reportDate} 学生日报汇总</h2>
       <p>已提交 ${reports?.length || 0} 人，未提交 ${missing} 人；
-      满意 ${counts.satisfied}，一般 ${counts.average}，
+      很满意 ${counts.very_satisfied}，满意 ${counts.satisfied}，一般 ${counts.average}，
       不满意 ${counts.dissatisfied}，其他 ${counts.other}。</p>
       <h3>日报详情</h3><ul>${details || '<li>当日无人提交</li>'}</ul>`;
 

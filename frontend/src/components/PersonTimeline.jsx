@@ -10,6 +10,7 @@ const daysAgo = (days) => {
 };
 
 const labels = {
+  very_satisfied: '很满意',
   satisfied: '满意',
   average: '一般',
   dissatisfied: '不满意',
@@ -69,6 +70,7 @@ function PersonTimeline() {
         {data && (
           <div className="timeline-summary">
             <span>共提交 {summary.submitted || 0} 天</span>
+            <span>很满意 {summary.very_satisfied || 0}</span>
             <span>满意 {summary.satisfied || 0}</span>
             <span>一般 {summary.average || 0}</span>
             <span>不满意 {summary.dissatisfied || 0}</span>

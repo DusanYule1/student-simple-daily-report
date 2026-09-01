@@ -763,6 +763,10 @@ export class LocalSupabaseClient {
         ) as satisfied_count,
         (select count(r.id) from daily_reports r
           where r.student_id = s.id and r.report_date >= ? and r.report_date < ?
+            and r.self_evaluation = 'very_satisfied'
+        ) as very_satisfied_count,
+        (select count(r.id) from daily_reports r
+          where r.student_id = s.id and r.report_date >= ? and r.report_date < ?
             and r.self_evaluation = 'average'
         ) as average_count,
         (select count(r.id) from daily_reports r
@@ -785,6 +789,7 @@ export class LocalSupabaseClient {
         monthStart, nextStart,
         monthStart, nextStart,
         monthStart, nextStart,
+        monthStart, nextStart,
         ...(search ? [`%${search}%`] : []),
       ) as Array<Record<string, unknown>>;
       const data = rows.map((row) => ({
@@ -792,6 +797,7 @@ export class LocalSupabaseClient {
         student_name: row.student_name,
         activities: JSON.parse(String(row.activities || '[]')),
         submitted_count: Number(row.submitted_count),
+        very_satisfied_count: Number(row.very_satisfied_count),
         satisfied_count: Number(row.satisfied_count),
         average_count: Number(row.average_count),
         dissatisfied_count: Number(row.dissatisfied_count),
