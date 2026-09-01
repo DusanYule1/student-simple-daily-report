@@ -9,7 +9,7 @@ import {
 } from '../services/monthlyBoardCache';
 import { businessDate, datesInMonth, monthBounds } from '../time';
 
-type Evaluation = 'satisfied' | 'average' | 'dissatisfied' | 'other';
+type Evaluation = 'very_satisfied' | 'satisfied' | 'average' | 'dissatisfied' | 'other';
 
 interface RpcActivity {
   date: string;
@@ -22,6 +22,7 @@ interface RpcRow {
   student_name: string;
   activities: RpcActivity[] | null;
   submitted_count: number | string;
+  very_satisfied_count: number | string;
   satisfied_count: number | string;
   average_count: number | string;
   dissatisfied_count: number | string;
@@ -86,6 +87,7 @@ export const getMonthlyBoard = async (
       },
       summary: {
         submitted: Number(row.submitted_count),
+        very_satisfied: Number(row.very_satisfied_count),
         satisfied: Number(row.satisfied_count),
         average: Number(row.average_count),
         dissatisfied: Number(row.dissatisfied_count),

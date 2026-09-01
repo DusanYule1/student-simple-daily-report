@@ -1,6 +1,7 @@
 import React from 'react';
 
 const labels = {
+  very_satisfied: '很满意',
   satisfied: '满意',
   average: '一般',
   dissatisfied: '不满意',
