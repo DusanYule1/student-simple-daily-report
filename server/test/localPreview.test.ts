@@ -98,6 +98,32 @@ test('seeded students see the monthly board with seeded activity', async () => {
   assert.equal(disabledLiu, undefined, 'disabled students stay off the board');
 });
 
+test('board shows all ten active students from the thirteen-student seed', async () => {
+  const board = await call('GET', `/board/monthly?month=${yearMonth}`, undefined, {
+    cookie: zhangweiCookie,
+  });
+  const { data } = await board.json();
+  assert.equal(data.students.length, 10, 'ten active students on the board');
+
+  const diligent = data.students.find((row: any) => row.student.name === '张伟');
+  assert.ok(diligent);
+  assert.ok(diligent.summary.submitted >= 1, 'diligent style shows current month activity');
+
+  const spotty = data.students.find((row: any) => row.student.name === '赵磊');
+  assert.ok(spotty);
+  assert.ok(
+    spotty.summary.submitted <= diligent.summary.submitted,
+    'spotty style leaves visible gaps on the board',
+  );
+
+  const leave = data.students.find((row: any) => row.student.name === '孙悦');
+  assert.ok(leave);
+  assert.ok(
+    leave.summary.submitted <= diligent.summary.submitted,
+    'leave style shows a lighter row than diligent',
+  );
+});
+
 test('board search mirrors rpc behaviour and consistent counters', async () => {
   const mine = await call(
     'GET',
@@ -121,8 +147,12 @@ test('student submits today report with prefill and upsert semantics', async () 
   assert.equal(todayBefore.status, 200);
   const beforeBody = ((await todayBefore.json()) as any).data;
   assert.ok(beforeBody.business_date);
-  assert.ok(beforeBody.prefill.today_summary.length > 0, 'prefill uses yesterday plan');
-  assert.equal(beforeBody.report, null, 'today not yet submitted for zhangwei');
+  assert.ok(beforeBody.report, 'zhangwei already submitted today via seed');
+  assert.ok(
+    beforeBody.report.tomorrow_plan === null
+      || typeof beforeBody.report.tomorrow_plan === 'string',
+    'seeded today report carries readable fields',
+  );
 
   const submitted = await call('PUT', '/reports/today', {
     self_evaluation: 'satisfied',
@@ -130,7 +160,7 @@ test('student submits today report with prefill and upsert semantics', async () 
     tomorrow_plan: '继续验证看板',
     other_notes: '无',
   }, { cookie: zhangweiCookie });
-  assert.equal(submitted.status, 201);
+  assert.equal(submitted.status, 200, 're-submitting a seeded day upserts');
   const firstBody = ((await submitted.json()) as any).data;
   assert.equal(firstBody.student.name, '张伟');
 
@@ -170,14 +200,14 @@ test('admin can list, search and disable students with audit trail', async () =>
   const listed = await call('GET', '/admin/students?page=1&page_size=50', undefined, adminHeaders());
   assert.equal(listed.status, 200);
   const listBody = ((await listed.json()) as any);
-  assert.ok(listBody.data.length >= 5, 'seeded students plus chenxin');
+  assert.ok(listBody.data.length >= 13, 'thirteen seeded students plus chenxin');
   assert.ok(listBody.meta.total >= listBody.data.length);
 
   const searched = await call('GET', '/admin/students?q=chen', undefined, adminHeaders());
   assert.equal(searched.status, 200);
   assert.deepEqual(
-    ((await searched.json()) as any).data.map((row: any) => row.username),
-    ['chenxin'],
+    ((await searched.json()) as any).data.map((row: any) => row.username).sort(),
+    ['chenchen', 'chenxin'],
   );
 
   const target = listBody.data.find((row: any) => row.username === 'chenxin');

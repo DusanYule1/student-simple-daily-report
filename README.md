@@ -166,7 +166,7 @@ npm run dev:local
 ### 本地预览账号
 
 - 管理员：`admin@example.com` / `local-admin-123`（可用环境变量 `LOCAL_ADMIN_PASSWORD` 覆盖）
-- 学生：`zhangwei` / `lina` / `wangqiang`，密码均为 `student-123456`；`liuyang` 为停用状态演示账号
+- 学生：共 13 个演示账号（10 启用 / 3 停用），密码均为 `student-123456`；启用账号如 `zhangwei`、`lina`、`wangqiang`、`chenchen` 等，停用演示为 `liuyang`、`xutao`、`gaoli`
 
 种子数据包含过去两周的日报，打开月度看板即可看到完整热力图效果。
 
