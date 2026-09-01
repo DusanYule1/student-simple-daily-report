@@ -17,6 +17,22 @@ export type SeedStudent = {
   reports: SeedReport[];
 };
 
+type SeedStyle =
+  | 'diligent'    // every seeded day, mostly satisfied
+  | 'spotty'      // about half the days, visible gaps
+  | 'fluctuating' // mixed evaluations, colourful board
+  | 'leave';      // continuous block of missing days in the middle
+
+type SeedSpec = {
+  name: string;
+  username: string;
+  email: string;
+  status: 'active' | 'disabled';
+  style: SeedStyle;
+};
+
+const SEED_DAYS = 30;
+
 const dayShift = (base: string, offset: number): string => {
   const value = new Date(`${base}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + offset);
@@ -64,6 +80,14 @@ const summaries = [
     summary: '完成了代码评审反馈的修改，整理了 TODO 清单。',
     plan: '开始新模块的技术方案调研。',
   },
+  {
+    summary: '排查了测试环境的偶发超时，定位到连接池配置问题。',
+    plan: '补充监控埋点，观察一周数据。',
+  },
+  {
+    summary: '整理了需求评审的反馈意见，更新了原型稿。',
+    plan: '和设计师确认视觉细节。',
+  },
 ];
 
 const evaluations: Array<SeedReport['selfEvaluation']> = [
@@ -75,11 +99,59 @@ const evaluations: Array<SeedReport['selfEvaluation']> = [
   'dissatisfied',
 ];
 
-const spec = [
-  { name: '张伟', username: 'zhangwei', email: 'zhangwei@example.com', status: 'active' as const },
-  { name: '李娜', username: 'lina', email: 'lina@example.com', status: 'active' as const },
-  { name: '王强', username: 'wangqiang', email: 'wangqiang@example.com', status: 'active' as const },
-  { name: '刘洋', username: 'liuyang', email: 'liuyang@example.com', status: 'disabled' as const },
+const fluctuatingEvaluations: Array<SeedReport['selfEvaluation']> = [
+  'satisfied',
+  'average',
+  'dissatisfied',
+  'average',
+  'other',
+  'dissatisfied',
+];
+
+const styleSubmits = (style: SeedStyle, dayIndex: number): boolean => {
+  switch (style) {
+    case 'diligent':
+      return true;
+    case 'spotty':
+      return dayIndex % 2 === 0 || dayIndex % 5 === 0;
+    case 'fluctuating':
+      return dayIndex % 4 !== 3;
+    case 'leave':
+      return !(dayIndex >= 4 && dayIndex <= 6);
+  }
+};
+
+const styleEvaluation = (
+  style: SeedStyle,
+  dayIndex: number,
+  studentIndex: number,
+): SeedReport['selfEvaluation'] => {
+  switch (style) {
+    case 'diligent':
+      return evaluations[(studentIndex + dayIndex) % evaluations.length];
+    case 'spotty':
+      return evaluations[(studentIndex * 2 + dayIndex) % evaluations.length];
+    case 'fluctuating':
+      return fluctuatingEvaluations[(studentIndex + dayIndex) % fluctuatingEvaluations.length];
+    case 'leave':
+      return evaluations[(studentIndex + dayIndex * 3) % evaluations.length];
+  }
+};
+
+const spec: SeedSpec[] = [
+  { name: '张伟', username: 'zhangwei', email: 'zhangwei@example.com', status: 'active', style: 'diligent' },
+  { name: '李娜', username: 'lina', email: 'lina@example.com', status: 'active', style: 'diligent' },
+  { name: '王强', username: 'wangqiang', email: 'wangqiang@example.com', status: 'active', style: 'diligent' },
+  { name: '陈晨', username: 'chenchen', email: 'chenchen@example.com', status: 'active', style: 'diligent' },
+  { name: '刘洋', username: 'liuyang', email: 'liuyang@example.com', status: 'disabled', style: 'spotty' },
+  { name: '赵磊', username: 'zhaolei', email: 'zhaolei@example.com', status: 'active', style: 'spotty' },
+  { name: '孙悦', username: 'sunyue', email: 'sunyue@example.com', status: 'active', style: 'leave' },
+  { name: '周杰', username: 'zhoujie', email: 'zhoujie@example.com', status: 'active', style: 'fluctuating' },
+  { name: '吴霞', username: 'wuxia', email: 'wuxia@example.com', status: 'active', style: 'spotty' },
+  { name: '郑凯', username: 'zhengkai', email: 'zhengkai@example.com', status: 'active', style: 'leave' },
+  { name: '冯雪', username: 'fengxue', email: 'fengxue@example.com', status: 'active', style: 'fluctuating' },
+  { name: '许涛', username: 'xutao', email: 'xutao@example.com', status: 'disabled', style: 'fluctuating' },
+  { name: '高丽', username: 'gaoli', email: 'gaoli@example.com', status: 'disabled', style: 'diligent' },
 ];
 
 export const buildStudents = async (
@@ -91,17 +163,16 @@ export const buildStudents = async (
 
   for (const [index, item] of spec.entries()) {
     const reports: SeedReport[] = [];
-    // Past 13 business days ending yesterday; skip one to show a missing cell.
-    for (let offset = -13; offset <= -1; offset += 1) {
-      if (offset === -4) continue;
+    for (let offset = -SEED_DAYS; offset <= 0; offset += 1) {
+      const dayIndex = offset + SEED_DAYS;
+      if (!styleSubmits(item.style, dayIndex)) continue;
       const date = dayShift(today, offset);
-      const seedIndex = ((index + offset + 26) % summaries.length + summaries.length)
-        % summaries.length;
+      const summaryIndex = (index * 3 + dayIndex) % summaries.length;
       reports.push({
         date,
-        selfEvaluation: evaluations[seedIndex],
-        todaySummary: summaries[seedIndex].summary,
-        tomorrowPlan: summaries[seedIndex].plan,
+        selfEvaluation: styleEvaluation(item.style, dayIndex, index),
+        todaySummary: summaries[summaryIndex].summary,
+        tomorrowPlan: summaries[summaryIndex].plan,
         otherNotes: offset % 5 === 0 ? '需要协助 review 设计稿' : '',
       });
     }
