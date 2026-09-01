@@ -69,7 +69,21 @@ export const getLocalDb = (): DatabaseSync => {
   if (cached) return cached;
   const file = localDbPath();
   mkdirSync(dirname(file), { recursive: true });
-  cached = new DatabaseSync(file);
+  // NFS 软挂载上 SQLite 锁可能瞬断（"unable to open database file"），
+  // 短退避重试几次而不是直接 500。
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      cached = new DatabaseSync(file);
+      break;
+    } catch (error) {
+      lastError = error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200 * (attempt + 1));
+    }
+  }
+  if (!cached) {
+    throw lastError ?? new Error('unable to open local sqlite database');
+  }
   cached.exec('pragma journal_mode = wal;');
   cached.exec('pragma foreign_keys = on;');
   return cached;
