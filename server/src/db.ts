@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from './config';
-import { getLocalClient, getLocalDb, isLocalMode } from './local/bootstrap';
+import { assertProductionSupabaseConfig, getLocalClient, getLocalDb, isLocalMode } from './local/bootstrap';
 import type { LocalSupabaseClient } from './local/supabaseShim';
 
 export type AppDbClient = SupabaseClient | LocalSupabaseClient;
@@ -8,6 +8,7 @@ export type AppDbClient = SupabaseClient | LocalSupabaseClient;
 let client: SupabaseClient | undefined;
 
 export const getDb = (): AppDbClient => {
+  assertProductionSupabaseConfig();
   if (isLocalMode()) {
     return getLocalClient();
   }
