@@ -65,6 +65,32 @@ export const localDbPath = (): string =>
 export const isLocalMode = (): boolean =>
   !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Netlify/Azure 等托管运行环境标识：命中其一即视为生产部署。
+const PROD_RUNTIME_ENV_KEYS = [
+  'NETLIFY',
+  'AWS_LAMBDA_FUNCTION_NAME',
+  'NETLIFY_DEV',
+  'CONTEXT',
+] as const;
+
+const isManagedRuntime = (): boolean =>
+  PROD_RUNTIME_ENV_KEYS.some(
+    (key) => key === 'NETLIFY_DEV'
+      ? process.env.NETLIFY_DEV === 'true' && process.env.NETLIFY === 'true'
+      : Boolean(process.env[key] && key !== 'CONTEXT'),
+  ) || process.env.CONTEXT === 'production';
+
+// 托管环境（Netlify Function）里绝不允许静默降级到 SQLite：
+// 临时文件系统会丢数据，必须启动即抛错提醒配置缺失。
+export const assertProductionSupabaseConfig = (): void => {
+  if (!isManagedRuntime()) return;
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+  throw new Error(
+    '[config] 托管生产环境缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY，'
+    + '已拒绝启动以防数据写入临时文件系统丢失。请在 Netlify 环境变量中配置。',
+  );
+};
+
 export const getLocalDb = (): DatabaseSync => {
   if (cached) return cached;
   const file = localDbPath();
