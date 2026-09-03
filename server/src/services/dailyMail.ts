@@ -93,6 +93,31 @@ const evaluationColors: Record<keyof typeof labels, string> = {
 
 const renderText = (value: unknown): string => renderMailMarkdown(value);
 
+// "未提交名单"的间隔口径：距最近一次提交空了几个自然日。
+// 查询窗口（天）之外没有提交记录的学生视为从未提交，不进名单。
+export const MISSING_WINDOW_DAYS = 90;
+
+const diffDays = (from: string, to: string): number =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`))
+      / 86_400_000,
+  );
+
+export const daysSinceLastSubmission = (
+  submittedDates: string[],
+  reportDate: string,
+): number | null => {
+  const windowStart = new Date(`${reportDate}T00:00:00Z`);
+  windowStart.setUTCDate(windowStart.getUTCDate() - MISSING_WINDOW_DAYS);
+  const windowStartIso = windowStart.toISOString().slice(0, 10);
+  const latest = submittedDates
+    .filter((date) => date >= windowStartIso && date < reportDate)
+    .sort()
+    .at(-1);
+  if (!latest) return null;
+  return diffDays(latest, reportDate);
+};
+
 export const sendDailyReportMail = async (reportDate: string) => {
   const db = getDb();
   const { count: attempts, error: attemptsError } = await db
@@ -117,19 +142,27 @@ export const sendDailyReportMail = async (reportDate: string) => {
   if (runError) throw runError;
 
   try {
+    const windowStart = new Date(`${reportDate}T00:00:00Z`);
+    windowStart.setUTCDate(windowStart.getUTCDate() - MISSING_WINDOW_DAYS);
     const [
       { data: students, error: studentsError },
       { data: reports, error: reportsError },
+      { data: recentSubmissions, error: recentSubmissionsError },
     ] = await Promise.all([
       db.from('students')
         .select('id, name, username, email').eq('status', 'active').order('name'),
       db.from('daily_reports').select(`
         report_date, self_evaluation, today_summary, tomorrow_plan, other_notes,
-        students!inner (name, username, status)
+        students!inner (id, name, username, status)
       `).eq('report_date', reportDate).eq('students.status', 'active'),
+      db.from('daily_reports')
+        .select('student_id, report_date')
+        .gte('report_date', windowStart.toISOString().slice(0, 10))
+        .lte('report_date', reportDate),
     ]);
     if (studentsError) throw studentsError;
     if (reportsError) throw reportsError;
+    if (recentSubmissionsError) throw recentSubmissionsError;
     if (!students?.length) throw new Error('没有启用的学生，无法发送每日邮件');
     const missingEmailStudents = students.filter((student: any) => !student.email);
     if (missingEmailStudents.length) {
@@ -144,6 +177,27 @@ export const sendDailyReportMail = async (reportDate: string) => {
       counts[report.self_evaluation as keyof typeof counts] += 1;
     }
     const missing = Math.max(0, students.length - (reports?.length || 0));
+    const submittedByStudent = new Map<string, string[]>();
+    for (const row of recentSubmissions || []) {
+      const list = submittedByStudent.get(row.student_id as string) || [];
+      list.push(row.report_date as string);
+      submittedByStudent.set(row.student_id as string, list);
+    }
+    type MissingEntry = { student: any; gap: number };
+    const missingStudents = students
+      .filter((student: any) => !(reports || []).some((report: any) => {
+        const embedded = Array.isArray(report.students) ? report.students[0] : report.students;
+        return embedded?.id === student.id;
+      }))
+      .map((student: any): { student: any; gap: number | null } => ({
+        student,
+        gap: daysSinceLastSubmission(submittedByStudent.get(student.id) || [], reportDate),
+      }))
+      .filter((entry: { student: any; gap: number | null }): entry is MissingEntry => entry.gap !== null)
+      .sort((a: MissingEntry, b: MissingEntry) => b.gap - a.gap);
+    const missingList = missingStudents
+      .map((entry: MissingEntry) => `<li style="color:#b91c1c;">${escapeHtml(entry.student.name)} (${escapeHtml(entry.student.username)}) (${entry.gap})</li>`)
+      .join('');
     const evaluationKeys = ['very_satisfied', 'satisfied', 'average', 'dissatisfied', 'other'] as const;
     const distribution = evaluationKeys
       .filter((key) => counts[key] > 0)
@@ -169,6 +223,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
       <p>今天有 ${reports?.length || 0} 人提交了进度${missing > 0 ? `，未提交 ${missing} 人` : ''}。${boardLink}
       </p>
       ${distribution ? `<h3>📊 自评分布</h3><ul>${distribution}</ul>` : ''}
+      ${missingList ? `<h3>⚠️ 未提交名单（${missingStudents.length} 人）</h3><ul>${missingList}</ul>` : ''}
       <h3>👥 详细情况</h3><ul>${details || '<li>当日无人提交。</li>'}</ul>
       <p><em>—— 自动化日报系统</em></p>`;
 

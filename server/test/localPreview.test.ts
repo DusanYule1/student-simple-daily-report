@@ -283,14 +283,20 @@ test('duplicate username and duplicate recipient email return 409', async () => 
 });
 
 test('daily mail retry writes a local preview file and run record', async () => {
-  const retried = await call('POST', `/admin/notification-runs/${businessDate()}/retry`, {
+  // 取 3 天前的业务日：种子在该天有规律性缺勤（fluctuating/spotty），可验证未提交名单。
+  const mailDate = (() => {
+    const date = new Date(`${businessDate()}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 3);
+    return date.toISOString().slice(0, 10);
+  })();
+  const retried = await call('POST', `/admin/notification-runs/${mailDate}/retry`, {
     reason: '本地演示补发',
   }, adminHeaders());
   assert.equal(retried.status, 202);
   const runBody = ((await retried.json()) as any).data;
   assert.equal(runBody.status, 'succeeded');
 
-  const previewPath = `${process.env.LOCAL_SQLITE_DB}.mail/${businessDate()}.html`;
+  const previewPath = `${process.env.LOCAL_SQLITE_DB}.mail/${mailDate}.html`;
   const html = readFileSync(previewPath, 'utf8');
   assert.match(html, /学生日报汇总/);
   assert.match(html, /张伟/);
@@ -299,6 +305,9 @@ test('daily mail retry writes a local preview file and run record', async () => 
   assert.match(html, /今天有 \d+ 人提交了进度/);
   assert.match(html, /#7cf4a4|#dcfce7|#fef9c3|#fee2e2|#e5e7eb/);
   assert.match(html, /—— 自动化日报系统/);
+  // 未提交名单：列出缺口学生并标注距最近提交的空天数
+  assert.match(html, /未提交名单（\d+ 人）/);
+  assert.match(html, /\(\w+\) \(\d+\)/);
 
   const runs = await call(
     'GET',
@@ -308,7 +317,7 @@ test('daily mail retry writes a local preview file and run record', async () => 
   );
   assert.equal(runs.status, 200);
   const run = ((await runs.json()) as any).data[0];
-  assert.equal(run.report_date, businessDate());
+  assert.equal(run.report_date, mailDate);
   assert.ok(run.recipient_count >= 3, 'every active student receives a copy');
 });
 
