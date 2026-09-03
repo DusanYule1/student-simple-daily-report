@@ -294,6 +294,11 @@ test('daily mail retry writes a local preview file and run record', async () => 
   const html = readFileSync(previewPath, 'utf8');
   assert.match(html, /学生日报汇总/);
   assert.match(html, /张伟/);
+  assert.match(html, /📅/);
+  assert.match(html, /📊 自评分布/);
+  assert.match(html, /今天有 \d+ 人提交了进度/);
+  assert.match(html, /#7cf4a4|#dcfce7|#fef9c3|#fee2e2|#e5e7eb/);
+  assert.match(html, /—— 自动化日报系统/);
 
   const runs = await call(
     'GET',
