@@ -72,8 +72,7 @@ const escapeHtml = (value: unknown): string =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 
-const renderText = (value: unknown): string =>
-  escapeHtml(value || '无').replaceAll('\n', '<br>');
+import { renderMailMarkdown } from './mailMarkdown';
 
 const labels: Record<string, string> = {
   very_satisfied: '很满意',
@@ -82,6 +81,17 @@ const labels: Record<string, string> = {
   dissatisfied: '不满意',
   other: '其他',
 };
+
+// 与前端看板 .evaluation-* 配色保持一致。
+const evaluationColors: Record<keyof typeof labels, string> = {
+  very_satisfied: '#7cf4a4',
+  satisfied: '#dcfce7',
+  average: '#fef9c3',
+  dissatisfied: '#fee2e2',
+  other: '#e5e7eb',
+};
+
+const renderText = (value: unknown): string => renderMailMarkdown(value);
 
 export const sendDailyReportMail = async (reportDate: string) => {
   const db = getDb();
@@ -134,21 +144,33 @@ export const sendDailyReportMail = async (reportDate: string) => {
       counts[report.self_evaluation as keyof typeof counts] += 1;
     }
     const missing = Math.max(0, students.length - (reports?.length || 0));
+    const evaluationKeys = ['very_satisfied', 'satisfied', 'average', 'dissatisfied', 'other'] as const;
+    const distribution = evaluationKeys
+      .filter((key) => counts[key] > 0)
+      .map((key) => `<li style="color:#334155;"><span style="background:${evaluationColors[key]}; padding:1px 8px; border-radius:4px; font-weight:bold;">${escapeHtml(labels[key])}</span>: ${counts[key]} 人</li>`)
+      .join('');
     const details = (reports || []).map((report: any) => {
       const student = Array.isArray(report.students) ? report.students[0] : report.students;
-      return `<li style="margin-bottom:20px">
+      const evaluation = report.self_evaluation as keyof typeof labels;
+      const color = evaluationColors[evaluation] || '#ffffff';
+      return `<li style="background-color:${color}; padding:12px 16px; border-radius:6px; margin-bottom:16px;">
         <strong>${escapeHtml(student.name)} (${escapeHtml(student.username)})</strong>
-        · ${escapeHtml(labels[report.self_evaluation])}<br>
+        · ${escapeHtml(labels[evaluation])}<br>
         <strong>今日总结</strong><br>${renderText(report.today_summary)}<br>
         <strong>明日计划</strong><br>${renderText(report.tomorrow_plan)}<br>
         <strong>其他说明</strong><br>${renderText(report.other_notes)}
       </li>`;
     }).join('');
-    const html = `<h2>${reportDate} 学生日报汇总</h2>
-      <p>已提交 ${reports?.length || 0} 人，未提交 ${missing} 人；
-      很满意 ${counts.very_satisfied}，满意 ${counts.satisfied}，一般 ${counts.average}，
-      不满意 ${counts.dissatisfied}，其他 ${counts.other}。</p>
-      <h3>日报详情</h3><ul>${details || '<li>当日无人提交</li>'}</ul>`;
+    const boardUrl = process.env.MAIL_BOARD_URL?.trim();
+    const boardLink = boardUrl
+      ? `\n      <p><a href="${escapeHtml(boardUrl)}" rel="noopener noreferrer">详情可查看 ${escapeHtml(boardUrl)} 的进展看板。</a></p>`
+      : '';
+    const html = `<h2>📅 ${reportDate} 学生日报汇总</h2>
+      <p>今天有 ${reports?.length || 0} 人提交了进度${missing > 0 ? `，未提交 ${missing} 人` : ''}。${boardLink}
+      </p>
+      ${distribution ? `<h3>📊 自评分布</h3><ul>${distribution}</ul>` : ''}
+      <h3>👥 详细情况</h3><ul>${details || '<li>当日无人提交。</li>'}</ul>
+      <p><em>—— 自动化日报系统</em></p>`;
 
     await deliverMail(
       recipients,
