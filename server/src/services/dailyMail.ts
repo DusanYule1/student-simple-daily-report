@@ -174,7 +174,6 @@ export const sendDailyReportMail = async (reportDate: string) => {
     for (const report of reports || []) {
       counts[report.self_evaluation as keyof typeof counts] += 1;
     }
-    const missing = Math.max(0, students.length - (reports?.length || 0));
     const submittedByStudent = new Map<string, string[]>();
     for (const row of recentSubmissions || []) {
       const list = submittedByStudent.get(row.student_id as string) || [];
@@ -218,7 +217,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
       ? `\n      <p><a href="${escapeHtml(boardUrl)}" rel="noopener noreferrer">详情可查看 ${escapeHtml(boardUrl)} 的进展看板。</a></p>`
       : '';
     const html = `<h2>📅 ${reportDate} 学习进度日报</h2>
-      <p>今天有 ${reports?.length || 0} 人提交了进度${missing > 0 ? `，未提交 ${missing} 人` : ''}。${boardLink}
+      <p>今天有 ${reports?.length || 0} 人提交了进度。${boardLink}
       </p>
       ${distribution ? `<h3>📊 自评分布</h3><ul>${distribution}</ul>` : ''}
       ${missingList ? `<h3>⚠️ 未提交名单（${missingStudents.length} 人）</h3><ul>${missingList}</ul>` : ''}
