@@ -272,7 +272,7 @@ test('daily mail retry writes a local preview file and run record', async () => 
   assert.match(html, /张伟/);
   assert.match(html, /📅/);
   assert.match(html, /📊 自评分布/);
-  assert.match(html, /今天有 \d+ 人提交了进度/);
+  assert.match(html, /今天有 \d+ 人提交了进度。/);
   assert.match(html, /#dcfce7|#fef9c3|#fee2e2|#e5e7eb/);
   assert.match(html, /—— 自动化日报系统/);
   // 未提交名单：列出缺口学生并标注距最近提交的空天数
