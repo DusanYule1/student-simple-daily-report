@@ -33,7 +33,7 @@ create table if not exists daily_reports (
   id text primary key,
   student_id text not null references students(id) on delete restrict,
   report_date text not null,
-  self_evaluation text not null check (self_evaluation in ('very_satisfied', 'satisfied', 'average', 'dissatisfied', 'other')),
+  self_evaluation text not null check (self_evaluation in ('satisfied', 'average', 'dissatisfied', 'other')),
   today_summary text,
   tomorrow_plan text,
   other_notes text,

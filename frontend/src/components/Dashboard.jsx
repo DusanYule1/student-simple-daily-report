@@ -11,7 +11,6 @@ import {
 import MonthActivityCalendar from './MonthActivityCalendar';
 
 const evaluationOptions = [
-  { value: 'very_satisfied', label: '很满意' },
   { value: 'satisfied', label: '满意' },
   { value: 'average', label: '一般' },
   { value: 'dissatisfied', label: '不满意' },

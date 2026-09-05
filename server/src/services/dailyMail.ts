@@ -75,7 +75,6 @@ const escapeHtml = (value: unknown): string =>
 import { renderMailMarkdown } from './mailMarkdown';
 
 const labels: Record<string, string> = {
-  very_satisfied: '很满意',
   satisfied: '满意',
   average: '一般',
   dissatisfied: '不满意',
@@ -84,7 +83,6 @@ const labels: Record<string, string> = {
 
 // 与前端看板 .evaluation-* 配色保持一致。
 const evaluationColors: Record<keyof typeof labels, string> = {
-  very_satisfied: '#7cf4a4',
   satisfied: '#dcfce7',
   average: '#fef9c3',
   dissatisfied: '#fee2e2',
@@ -172,7 +170,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
     }
     const recipients = students.map((student: any) => student.email as string);
 
-    const counts = { very_satisfied: 0, satisfied: 0, average: 0, dissatisfied: 0, other: 0 };
+    const counts = { satisfied: 0, average: 0, dissatisfied: 0, other: 0 };
     for (const report of reports || []) {
       counts[report.self_evaluation as keyof typeof counts] += 1;
     }
@@ -198,7 +196,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
     const missingList = missingStudents
       .map((entry: MissingEntry) => `<li style="color:#b91c1c;">${escapeHtml(entry.student.name)} (${escapeHtml(entry.student.username)}) (${entry.gap})</li>`)
       .join('');
-    const evaluationKeys = ['very_satisfied', 'satisfied', 'average', 'dissatisfied', 'other'] as const;
+    const evaluationKeys = ['satisfied', 'average', 'dissatisfied', 'other'] as const;
     const distribution = evaluationKeys
       .filter((key) => counts[key] > 0)
       .map((key) => `<li style="color:#334155;"><span style="background:${evaluationColors[key]}; padding:1px 8px; border-radius:4px; font-weight:bold;">${escapeHtml(labels[key])}</span>: ${counts[key]} 人</li>`)
@@ -219,7 +217,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
     const boardLink = boardUrl
       ? `\n      <p><a href="${escapeHtml(boardUrl)}" rel="noopener noreferrer">详情可查看 ${escapeHtml(boardUrl)} 的进展看板。</a></p>`
       : '';
-    const html = `<h2>📅 ${reportDate} 学生日报汇总</h2>
+    const html = `<h2>📅 ${reportDate} 学习进度日报</h2>
       <p>今天有 ${reports?.length || 0} 人提交了进度${missing > 0 ? `，未提交 ${missing} 人` : ''}。${boardLink}
       </p>
       ${distribution ? `<h3>📊 自评分布</h3><ul>${distribution}</ul>` : ''}
@@ -229,7 +227,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
 
     await deliverMail(
       recipients,
-      `${reportDate} 学习进度日报`,
+      `📊 ${reportDate} 学习进度日报`,
       html,
       reportDate,
     );

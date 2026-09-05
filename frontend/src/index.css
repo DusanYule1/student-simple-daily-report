@@ -341,7 +341,6 @@ thead th {
   position: relative;
   z-index: 1;
 }
-.evaluation-very_satisfied { background: #7cf4a4 !important; }
 .evaluation-satisfied { background: #dcfce7 !important; }
 .evaluation-average { background: #fef9c3 !important; }
 .evaluation-dissatisfied { background: #fee2e2 !important; }

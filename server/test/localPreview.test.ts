@@ -137,38 +137,8 @@ test('board search mirrors rpc behaviour and consistent counters', async () => {
   const lina = data.students[0];
   assert.equal(
     lina.summary.submitted,
-    lina.summary.very_satisfied + lina.summary.satisfied + lina.summary.average
+    lina.summary.satisfied + lina.summary.average
       + lina.summary.dissatisfied + lina.summary.other,
-  );
-});
-
-test('very_satisfied is a submittable evaluation surfaced on the board', async () => {
-  const submitted = await call('PUT', '/reports/today', {
-    self_evaluation: 'very_satisfied',
-    today_summary: '体验新增的 很满意 选项',
-    tomorrow_plan: '验证看板深绿色块',
-  }, { cookie: zhangweiCookie });
-  assert.equal(submitted.status, 200, 'very_satisfied must pass enum validation');
-  assert.equal(
-    ((await submitted.json()) as any).data.self_evaluation,
-    'very_satisfied',
-  );
-
-  const board = await call('GET', `/board/monthly?month=${yearMonth}`, undefined, {
-    cookie: zhangweiCookie,
-  });
-  const { data } = await board.json();
-  const zhangwei = data.students.find((row: any) => row.student.name === '张伟');
-  assert.ok(zhangwei);
-  assert.ok(
-    (zhangwei.summary.very_satisfied || 0) >= 1,
-    'board summary counts very_satisfied submissions',
-  );
-  assert.ok(
-    zhangwei.activities.some(
-      (activity: any) => activity.self_evaluation === 'very_satisfied',
-    ),
-    'board exposes very_satisfied cells for rendering',
   );
 });
 
@@ -298,12 +268,12 @@ test('daily mail retry writes a local preview file and run record', async () => 
 
   const previewPath = `${process.env.LOCAL_SQLITE_DB}.mail/${mailDate}.html`;
   const html = readFileSync(previewPath, 'utf8');
-  assert.match(html, /学生日报汇总/);
+  assert.match(html, /学习进度日报/);
   assert.match(html, /张伟/);
   assert.match(html, /📅/);
   assert.match(html, /📊 自评分布/);
   assert.match(html, /今天有 \d+ 人提交了进度/);
-  assert.match(html, /#7cf4a4|#dcfce7|#fef9c3|#fee2e2|#e5e7eb/);
+  assert.match(html, /#dcfce7|#fef9c3|#fee2e2|#e5e7eb/);
   assert.match(html, /—— 自动化日报系统/);
   // 未提交名单：列出缺口学生并标注距最近提交的空天数
   assert.match(html, /未提交名单（\d+ 人）/);
