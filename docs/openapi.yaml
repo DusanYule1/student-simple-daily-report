@@ -1320,7 +1320,7 @@ components:
     CreateStudentRequest:
       type: object
       additionalProperties: false
-      required: [name, username, email, temporary_password]
+      required: [name, username, temporary_password]
       properties:
         name:
           type: string
@@ -1331,6 +1331,8 @@ components:
         email:
           type: string
           format: email
+          nullable: true
+          description: 留空则该学生不接收日报邮件副本，其余功能不受影响
         temporary_password:
           type: string
           minLength: 8

@@ -162,13 +162,13 @@ export const sendDailyReportMail = async (reportDate: string) => {
     if (reportsError) throw reportsError;
     if (recentSubmissionsError) throw recentSubmissionsError;
     if (!students?.length) throw new Error('没有启用的学生，无法发送每日邮件');
-    const missingEmailStudents = students.filter((student: any) => !student.email);
-    if (missingEmailStudents.length) {
-      throw new Error(
-        `以下启用学生缺少邮箱：${missingEmailStudents.map((student: any) => student.name).join('、')}`,
-      );
+    // 无邮箱的学生跳过发送（邮件仍是全班日报，缺邮箱只影响其个人副本）。
+    const recipients = students
+      .map((student: any) => student.email as string | null)
+      .filter((email: string | null): email is string => Boolean(email));
+    if (!recipients.length) {
+      throw new Error('没有任何学生配置了邮箱，无法发送每日邮件');
     }
-    const recipients = students.map((student: any) => student.email as string);
 
     const counts = { satisfied: 0, average: 0, dissatisfied: 0, other: 0 };
     for (const report of reports || []) {

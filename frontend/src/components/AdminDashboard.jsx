@@ -56,7 +56,8 @@ export default function AdminDashboard() {
   const addStudent = async (event) => {
     event.preventDefault();
     try {
-      await createAdminStudent(studentForm);
+      const payload = { ...studentForm, email: studentForm.email.trim() || undefined };
+      await createAdminStudent(payload);
       setStudentForm({ name: '', username: '', email: '', temporary_password: '', status: 'active' });
       await load();
     } catch (requestError) { setError(messageOf(requestError)); }
@@ -118,7 +119,7 @@ export default function AdminDashboard() {
         <form className="inline-form" onSubmit={addStudent}>
           <input placeholder="姓名" value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })} required />
           <input placeholder="用户名" value={studentForm.username} onChange={(e) => setStudentForm({ ...studentForm, username: e.target.value })} required />
-          <input type="email" placeholder="学生邮箱" value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })} required />
+          <input type="email" placeholder="学生邮箱（留空则不收日报）" value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })} />
           <input type="password" placeholder="临时密码（至少 8 位）" value={studentForm.temporary_password} onChange={(e) => setStudentForm({ ...studentForm, temporary_password: e.target.value })} minLength="8" required />
           <button className="btn btn--primary">新增学生</button>
         </form>

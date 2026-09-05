@@ -291,6 +291,46 @@ test('daily mail retry writes a local preview file and run record', async () => 
   assert.ok(run.recipient_count >= 3, 'every active student receives a copy');
 });
 
+test('admin can create a student without email and mail run skips them', async () => {
+  const created = await call('POST', '/admin/students', {
+    name: '无邮箱生',
+    username: 'noemail',
+    temporary_password: 'noemail-pass-123',
+  }, adminHeaders());
+  assert.equal(created.status, 201, 'email is optional on create');
+  const createdBody = ((await created.json()) as any).data;
+  assert.equal(createdBody.email, null);
+
+  // 首次登录改密后提交一份日报，让无邮箱学生也出现在日报统计里
+  const login = await loginStudent('noemail', 'noemail-pass-123');
+  const changed = await call('PUT', '/student/password', {
+    current_password: 'noemail-pass-123',
+    new_password: 'noemail-8888',
+  }, { cookie: login });
+  assert.equal(changed.status, 204);
+  const newCookie = changed.headers.get('set-cookie')?.split(';')[0] as string;
+  const submitted = await call('PUT', '/reports/today', {
+    self_evaluation: 'satisfied',
+    today_summary: '无邮箱学生也能正常提交日报',
+  }, { cookie: newCookie });
+  assert.ok([200, 201].includes(submitted.status), 'no-email student can submit reports');
+
+  // 补发当日邮件：无邮箱学生被跳过，但日报统计仍包含 TA
+  const retried = await call('POST', `/admin/notification-runs/${businessDate()}/retry`, {
+    reason: '无邮箱跳过验证',
+  }, adminHeaders());
+  assert.equal(retried.status, 202);
+  const runBody = ((await retried.json()) as any).data;
+  assert.equal(runBody.status, 'succeeded');
+  assert.equal(runBody.recipient_count, 10, "10 seeded actives with email; the no-email student is skipped");
+
+  const html = readFileSync(
+    `${process.env.LOCAL_SQLITE_DB}.mail/${businessDate()}.html`,
+    'utf8',
+  );
+  assert.match(html, /无邮箱生/, 'no-email student still appears in the report body');
+});
+
 test('range listing and single day lookup expose serialized reports', async () => {
   const board = await call('GET', `/board/monthly?month=${yearMonth}`, undefined, {
     cookie: zhangweiCookie,

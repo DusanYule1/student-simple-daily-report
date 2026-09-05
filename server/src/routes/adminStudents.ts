@@ -8,7 +8,7 @@ import { hashPassword } from '../security/password';
 const createSchema = z.object({
   name: z.string().trim().min(1),
   username: z.string().trim().min(1).max(100),
-  email: z.string().trim().email().transform((value) => value.toLowerCase()),
+  email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
   temporary_password: z.string().min(8),
   status: z.enum(['active', 'disabled']).default('active'),
 }).strict();
@@ -91,7 +91,7 @@ export const createAdminStudent = async (request: Request, id: string) => {
     .insert({
       name: parsed.data.name,
       username,
-      email: parsed.data.email,
+      email: parsed.data.email ?? null,
       password_hash: passwordHash,
       status: parsed.data.status,
       must_change_password: true,
