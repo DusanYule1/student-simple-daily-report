@@ -93,7 +93,7 @@ const renderText = (value: unknown): string => renderMailMarkdown(value);
 
 // "未提交名单"的间隔口径：距最近一次提交空了几个自然日。
 // 查询窗口（天）之外没有提交记录的学生视为从未提交，不进名单。
-export const MISSING_WINDOW_DAYS = 90;
+export const MISSING_WINDOW_DAYS = 7;
 
 const diffDays = (from: string, to: string): number =>
   Math.round(

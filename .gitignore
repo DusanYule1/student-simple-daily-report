@@ -34,3 +34,4 @@ frontend/build/
 
 # Backup files
 docker-compose.yml.bk
+backups/

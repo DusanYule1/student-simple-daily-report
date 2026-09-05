@@ -116,14 +116,12 @@ function ContributionHeatmap({ reports }) {
         </div>
       </div>
       <div className="heatmap__legend">
-        <span>少</span>
-        <span className="heatmap-day evaluation-missing" title="未提交" />
-        <span className="heatmap-day evaluation-other" title="其他" />
-        <span className="heatmap-day evaluation-dissatisfied" title="不满意" />
-        <span className="heatmap-day evaluation-average" title="一般" />
-        <span className="heatmap-day evaluation-satisfied" title="满意" />
-        <span>多</span>
-        <span className="heatmap-legend__hint">颜色表示当天自评：浅绿=满意，黄=一般，红=不满意，灰=其他，白=未提交</span>
+        <span className="heatmap-legend__item"><span className="heatmap-day evaluation-missing" title="未提交" />未提交</span>
+        <span className="heatmap-legend__item"><span className="heatmap-day evaluation-other" title="其他" />其他</span>
+        <span className="heatmap-legend__item"><span className="heatmap-day evaluation-dissatisfied" title="不满意" />不满意</span>
+        <span className="heatmap-legend__item"><span className="heatmap-day evaluation-average" title="一般" />一般</span>
+        <span className="heatmap-legend__item"><span className="heatmap-day evaluation-satisfied" title="满意" />满意</span>
+        <span className="heatmap-legend__hint">颜色表示当天自评</span>
       </div>
     </section>
   );
