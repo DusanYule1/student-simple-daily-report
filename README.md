@@ -2,8 +2,6 @@
 
 面向学生团队的轻量日报系统。学生使用系统内置账号登录，管理员使用 Supabase Auth；前端和 API 部署在 Netlify，业务数据保存于 Supabase PostgreSQL，每日汇总邮件通过 Resend 发送。
 
-生产环境：[student-daily-report-duxy.netlify.app](https://student-daily-report-duxy.netlify.app)
-
 ## 功能
 
 ### 学生端
@@ -83,6 +81,8 @@ supabase/migrations/   Supabase 数据库迁移
 scripts/               本地服务和管理员初始化脚本
 docs/                  需求、架构、API 与部署文档
 ```
+
+数据库备份/恢复工具位于 `scripts/backup-db.mts` 与 `scripts/restore-db.mts`，通过 Supabase REST 导出或回灌业务表。备份产物保存在本地 `backups/` 目录（已在 `.gitignore` 中忽略），不会上传任何云端。
 
 ## 环境变量
 
