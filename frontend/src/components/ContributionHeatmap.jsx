@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 
 const labels = {
-  very_satisfied: '很满意',
   satisfied: '满意',
   average: '一般',
   dissatisfied: '不满意',
@@ -123,9 +122,8 @@ function ContributionHeatmap({ reports }) {
         <span className="heatmap-day evaluation-dissatisfied" title="不满意" />
         <span className="heatmap-day evaluation-average" title="一般" />
         <span className="heatmap-day evaluation-satisfied" title="满意" />
-        <span className="heatmap-day evaluation-very_satisfied" title="很满意" />
         <span>多</span>
-        <span className="heatmap-legend__hint">颜色表示当天自评：深绿=很满意，浅绿=满意，黄=一般，红=不满意，灰=其他，白=未提交</span>
+        <span className="heatmap-legend__hint">颜色表示当天自评：浅绿=满意，黄=一般，红=不满意，灰=其他，白=未提交</span>
       </div>
     </section>
   );

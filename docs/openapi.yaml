@@ -966,7 +966,7 @@ components:
       enum: [active, disabled]
     Evaluation:
       type: string
-      enum: [very_satisfied, satisfied, average, dissatisfied, other]
+      enum: [satisfied, average, dissatisfied, other]
     StudentSummary:
       type: object
       required: [id, name]
@@ -1121,12 +1121,9 @@ components:
             - type: 'null'
     EvaluationSummary:
       type: object
-      required: [submitted, very_satisfied, satisfied, average, dissatisfied, other]
+      required: [submitted, satisfied, average, dissatisfied, other]
       properties:
         submitted:
-          type: integer
-          minimum: 0
-        very_satisfied:
           type: integer
           minimum: 0
         satisfied:

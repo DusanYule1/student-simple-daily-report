@@ -2,7 +2,7 @@ import { hashPassword } from '../security/password';
 
 export type SeedReport = {
   date: string;
-  selfEvaluation: 'very_satisfied' | 'satisfied' | 'average' | 'dissatisfied' | 'other';
+  selfEvaluation: 'satisfied' | 'average' | 'dissatisfied' | 'other';
   todaySummary: string;
   tomorrowPlan: string;
   otherNotes: string;
@@ -91,7 +91,6 @@ const summaries = [
 ];
 
 const evaluations: Array<SeedReport['selfEvaluation']> = [
-  'very_satisfied',
   'satisfied',
   'average',
   'satisfied',
@@ -129,13 +128,10 @@ const styleEvaluation = (
 ): SeedReport['selfEvaluation'] => {
   switch (style) {
     case 'diligent':
-      // Every fourth day of a diligent student shows the darker green cell.
-      if (dayIndex % 4 === 0) return 'very_satisfied';
       return evaluations[(studentIndex + dayIndex) % evaluations.length];
     case 'spotty':
       return evaluations[(studentIndex * 2 + dayIndex) % evaluations.length];
     case 'fluctuating':
-      if (studentIndex % 2 === 1 && dayIndex % 6 === 0) return 'very_satisfied';
       return fluctuatingEvaluations[(studentIndex + dayIndex) % fluctuatingEvaluations.length];
     case 'leave':
       return evaluations[(studentIndex + dayIndex * 3) % evaluations.length];
