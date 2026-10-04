@@ -91,9 +91,10 @@ const evaluationColors: Record<keyof typeof labels, string> = {
 
 const renderText = (value: unknown): string => renderMailMarkdown(value);
 
-// "未提交名单"的间隔口径：距最近一次提交空了几个自然日。
-// 查询窗口（天）之外没有提交记录的学生视为从未提交，不进名单。
-export const MISSING_WINDOW_DAYS = 7;
+// "未提交名单"的间隔口径：距最近一次提交空了几个自然日，不设窗口上限。
+// 只有从未提交过（零记录）的学生返回 null，不进名单。
+// 管理员可将单个学生设为 missing_report_exempt（暂停统计），同样不进名单；
+// 该学生一旦提交日报，开关自动失效（见 routes/reports.ts 的 upsertReportForDate）。
 
 const diffDays = (from: string, to: string): number =>
   Math.round(
@@ -105,11 +106,8 @@ export const daysSinceLastSubmission = (
   submittedDates: string[],
   reportDate: string,
 ): number | null => {
-  const windowStart = new Date(`${reportDate}T00:00:00Z`);
-  windowStart.setUTCDate(windowStart.getUTCDate() - MISSING_WINDOW_DAYS);
-  const windowStartIso = windowStart.toISOString().slice(0, 10);
   const latest = submittedDates
-    .filter((date) => date >= windowStartIso && date < reportDate)
+    .filter((date) => date < reportDate)
     .sort()
     .at(-1);
   if (!latest) return null;
@@ -140,22 +138,20 @@ export const sendDailyReportMail = async (reportDate: string) => {
   if (runError) throw runError;
 
   try {
-    const windowStart = new Date(`${reportDate}T00:00:00Z`);
-    windowStart.setUTCDate(windowStart.getUTCDate() - MISSING_WINDOW_DAYS);
     const [
       { data: students, error: studentsError },
       { data: reports, error: reportsError },
       { data: recentSubmissions, error: recentSubmissionsError },
     ] = await Promise.all([
       db.from('students')
-        .select('id, name, username, email').eq('status', 'active').order('name'),
+        .select('id, name, username, email, missing_report_exempt')
+        .eq('status', 'active').order('name'),
       db.from('daily_reports').select(`
         report_date, self_evaluation, today_summary, tomorrow_plan, other_notes,
         students!inner (id, name, username, status)
       `).eq('report_date', reportDate).eq('students.status', 'active'),
       db.from('daily_reports')
         .select('student_id, report_date')
-        .gte('report_date', windowStart.toISOString().slice(0, 10))
         .lte('report_date', reportDate),
     ]);
     if (studentsError) throw studentsError;
@@ -186,6 +182,7 @@ export const sendDailyReportMail = async (reportDate: string) => {
         const embedded = Array.isArray(report.students) ? report.students[0] : report.students;
         return embedded?.id === student.id;
       }))
+      .filter((student: any) => !student.missing_report_exempt)
       .map((student: any): { student: any; gap: number | null } => ({
         student,
         gap: daysSinceLastSubmission(submittedByStudent.get(student.id) || [], reportDate),

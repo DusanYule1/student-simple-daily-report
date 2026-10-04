@@ -7,6 +7,7 @@ create table if not exists students (
   password_hash text not null,
   email text,
   status text not null default 'active' check (status in ('active', 'disabled')),
+  missing_report_exempt integer not null default 0,
   must_change_password integer not null default 1,
   last_login_at text,
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

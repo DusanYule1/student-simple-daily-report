@@ -331,6 +331,81 @@ test('admin can create a student without email and mail run skips them', async (
   assert.match(html, /无邮箱生/, 'no-email student still appears in the report body');
 });
 
+test('missing-report exemption hides a student until they submit again', async () => {
+  // 取 3 天前的业务日（种子在该天有规律性缺勤），找一个当日未交的学生
+  const mailDate = (() => {
+    const date = new Date(`${businessDate()}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 3);
+    return date.toISOString().slice(0, 10);
+  })();
+  const listed = await call('GET', '/admin/students?page=1&page_size=50', undefined, adminHeaders());
+  const students = ((await listed.json()) as any).data;
+  let target: any = null;
+  for (const row of students) {
+    if (row.status !== 'active' || !row.email) continue;
+    const detail = await call(
+      'GET',
+      `/students/${row.id}/reports/${mailDate}`,
+      undefined,
+      adminHeaders(),
+    );
+    if (detail.status === 404) { target = row; break; }
+  }
+  assert.ok(target, 'seed data provides an active missing student on that day');
+
+  // 管理员开启"暂停统计"
+  const exemptOn = await call('PATCH', `/admin/students/${target.id}`, {
+    missing_report_exempt: true,
+  }, adminHeaders());
+  assert.equal(exemptOn.status, 200);
+  assert.ok(((await exemptOn.json()) as any).data.missing_report_exempt, 'exemption is on');
+
+  // 补发邮件：未提交名单里不应出现该学生
+  const retried = await call('POST', `/admin/notification-runs/${mailDate}/retry`, {
+    reason: '豁免名单验证（开）',
+  }, adminHeaders());
+  const exemptHtml = readFileSync(
+    `${process.env.LOCAL_SQLITE_DB}.mail/${mailDate}.html`,
+    'utf8',
+  );
+  assert.doesNotMatch(
+    exemptHtml,
+    new RegExp(`${target.name} \\(${target.username}\\) \\(\\d+\\)`),
+    'exempt student is hidden from the missing list',
+  );
+
+  // 学生提交日报 → 开关自动失效
+  const login = await loginStudent(target.username, 'student-123456');
+  const changed = await call('PUT', '/student/password', {
+    current_password: 'student-123456',
+    new_password: 'student-999999',
+  }, { cookie: login });
+  assert.equal(changed.status, 204);
+  const freshCookie = changed.headers.get('set-cookie')?.split(';')[0] as string;
+  const submitted = await call('PUT', '/reports/today', {
+    self_evaluation: 'satisfied',
+    today_summary: '提交即解除暂停统计',
+  }, { cookie: freshCookie });
+  assert.ok([200, 201].includes(submitted.status));
+
+  const after = await call('GET', `/admin/students?q=${target.username}`, undefined, adminHeaders());
+  const afterBody = ((await after.json()) as any).data;
+  assert.ok(!afterBody[0].missing_report_exempt, 'submitting resets the exemption');
+});
+
+test('missing list hides admins-exempt students and resets after submission', async () => {
+  // 管理员关闭再开启的往返：确认 PATCH false 也能生效
+  const listed = await call('GET', '/admin/students?page=1&page_size=50', undefined, adminHeaders());
+  const students = ((await listed.json()) as any).data;
+  const target = students.find((row: any) => row.status === 'active' && !row.missing_report_exempt);
+  assert.ok(target);
+  const off = await call('PATCH', `/admin/students/${target.id}`, {
+    missing_report_exempt: false,
+  }, adminHeaders());
+  assert.equal(off.status, 200);
+  assert.ok(!((await off.json()) as any).data.missing_report_exempt, 'exemption is off');
+});
+
 test('range listing and single day lookup expose serialized reports', async () => {
   const board = await call('GET', `/board/monthly?month=${yearMonth}`, undefined, {
     cookie: zhangweiCookie,

@@ -133,6 +133,14 @@ const upsertReportForDate = async (
     .select(reportSelect)
     .single();
   if (error) throw error;
+  // 学生提交日报即解除"暂停统计"（missing_report_exempt 自动失效，
+  // 需管理员手动重新开启）。幂等：绝大多数学生本就是 false，update 无副作用。
+  const { error: exemptResetError } = await getDb()
+    .from('students')
+    .update({ missing_report_exempt: false, updated_at: now })
+    .eq('id', principal.id)
+    .eq('missing_report_exempt', true);
+  if (exemptResetError) throw exemptResetError;
   clearMonthlyBoardCache();
   return json(serializeReport(data), id, existing ? 200 : 201);
 };

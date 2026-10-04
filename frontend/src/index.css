@@ -63,6 +63,8 @@ body { background: var(--color-bg); color: var(--color-text); }
 .btn--primary { background: var(--color-primary); color: #fff; }
 .btn--primary:hover { background: var(--color-primary-hover); }
 .btn--ghost { background: transparent; border-color: var(--color-border); color: var(--color-text); }
+.btn--danger { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.btn--danger:hover { background: #b91c1c; border-color: #b91c1c; }
 .btn.is-loading { position: relative; pointer-events: none; }
 .btn.is-loading::after { content: ''; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.6); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; margin-left: 8px; display: inline-block; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -554,6 +556,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
   box-shadow: 0 5px 14px rgba(37, 99, 235, .2);
 }
 .btn--ghost { background: rgba(255, 255, 255, .78); }
+.btn--danger {
+  background: var(--color-danger, #dc2626);
+  border-color: var(--color-danger, #dc2626);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(220, 38, 38, .2);
+}
 
 .input,
 input[type="text"],

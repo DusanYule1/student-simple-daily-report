@@ -29,10 +29,13 @@ test('a report on the report date itself means no gap entry', () => {
   assert.equal(daysSinceLastSubmission(['2026-09-10'], '2026-09-10'), null);
 });
 
-test('no submissions inside the lookup window returns null', () => {
+test('an empty submission history means the student is treated as never submitted', () => {
   assert.equal(daysSinceLastSubmission([], '2026-09-10'), null);
-  // 提交在窗口起点之前视为从未提交
-  assert.equal(daysSinceLastSubmission(['2026-05-01'], '2026-09-10'), null);
+});
+
+test('gaps are unbounded: submissions outside any fixed window still count', () => {
+  // 窗口逻辑已取消：很久之前提交过的学生如实显示间隔天数
+  assert.equal(daysSinceLastSubmission(['2026-05-01'], '2026-09-10'), 132);
 });
 
 test('gaps across month boundaries are natural days', () => {

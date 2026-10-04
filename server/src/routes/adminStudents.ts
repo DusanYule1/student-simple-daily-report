@@ -11,6 +11,7 @@ const createSchema = z.object({
   email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
   temporary_password: z.string().min(8),
   status: z.enum(['active', 'disabled']).default('active'),
+  missing_report_exempt: z.boolean().optional(),
 }).strict();
 
 const updateSchema = z.object({
@@ -18,6 +19,7 @@ const updateSchema = z.object({
   username: z.string().trim().min(1).max(100).optional(),
   email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
   status: z.enum(['active', 'disabled']).optional(),
+  missing_report_exempt: z.boolean().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0);
 
 const passwordSchema = z.object({
@@ -42,7 +44,7 @@ const writeAudit = async (
 };
 
 const studentFields = `
-  id, name, username, email, status, must_change_password,
+  id, name, username, email, status, missing_report_exempt, must_change_password,
   last_login_at, created_at, updated_at
 `;
 
