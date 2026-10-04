@@ -70,6 +70,15 @@ export default function AdminDashboard() {
     catch (requestError) { setError(messageOf(requestError)); }
   };
 
+  const toggleExempt = async (student) => {
+    const next = !student.missing_report_exempt;
+    if (!window.confirm(`确认${next ? '暂停' : '恢复'}统计 ${student.name} 的未提交天数？`)) return;
+    try {
+      await updateAdminStudent(student.id, { missing_report_exempt: next });
+      await load();
+    } catch (requestError) { setError(messageOf(requestError)); }
+  };
+
   const resetPassword = async (student) => {
     const value = window.prompt(`为 ${student.name} 设置临时密码（至少 8 位）`);
     if (!value) return;
@@ -123,11 +132,17 @@ export default function AdminDashboard() {
           <input type="password" placeholder="临时密码（至少 8 位）" value={studentForm.temporary_password} onChange={(e) => setStudentForm({ ...studentForm, temporary_password: e.target.value })} minLength="8" required />
           <button className="btn btn--primary">新增学生</button>
         </form>
-        <div className="table-scroll"><table><thead><tr><th>姓名</th><th>用户名</th><th>邮箱</th><th>状态</th><th>改密</th><th>最后登录</th><th>操作</th></tr></thead>
+        <div className="table-scroll"><table><thead><tr><th>姓名</th><th>用户名</th><th>邮箱</th><th>状态</th><th>改密</th><th>未提交统计</th><th>最后登录</th><th>操作</th></tr></thead>
           <tbody>{students.map((student) => <tr key={student.id}>
             <td>{student.name}</td><td>{student.username}</td><td>{student.email || <strong className="text-danger">待补充</strong>}</td>
             <td>{student.status === 'active' ? '启用' : '停用'}</td>
             <td>{student.must_change_password ? '待修改' : '正常'}</td>
+            <td>{student.status === 'active' && (
+              <button
+                className={student.missing_report_exempt ? 'btn btn--danger' : 'btn btn--ghost'}
+                onClick={() => toggleExempt(student)}
+              >{student.missing_report_exempt ? '已暂停统计' : '正常统计'}</button>
+            )}</td>
             <td>{student.last_login_at ? new Date(student.last_login_at).toLocaleString() : '—'}</td>
             <td className="actions"><button onClick={() => editStudent(student)}>编辑</button>
               <button onClick={() => resetPassword(student)}>重置密码</button>

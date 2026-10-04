@@ -33,7 +33,7 @@ type EmbedSpec = {
 };
 
 const EMBED_TABLE_FIELDS: Record<string, string> = {
-  students: 'id, name, username, email, status, must_change_password',
+  students: 'id, name, username, email, status, missing_report_exempt, must_change_password',
   admin_profiles: 'id, name, email, status',
 };
 
