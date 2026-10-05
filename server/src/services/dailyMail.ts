@@ -138,25 +138,32 @@ export const sendDailyReportMail = async (reportDate: string) => {
   if (runError) throw runError;
 
   try {
-    const [
-      { data: students, error: studentsError },
-      { data: reports, error: reportsError },
-      { data: recentSubmissions, error: recentSubmissionsError },
-    ] = await Promise.all([
-      db.from('students')
-        .select('id, name, username, email, missing_report_exempt')
-        .eq('status', 'active').order('name'),
-      db.from('daily_reports').select(`
-        report_date, self_evaluation, today_summary, tomorrow_plan, other_notes,
-        students!inner (id, name, username, status)
-      `).eq('report_date', reportDate).eq('students.status', 'active'),
-      db.from('daily_reports')
-        .select('student_id, report_date')
-        .lte('report_date', reportDate),
-    ]);
+    const [{ data: students, error: studentsError }, { data: reports, error: reportsError }]
+      = await Promise.all([
+        db.from('students')
+          .select('id, name, username, email, missing_report_exempt')
+          .eq('status', 'active').order('name'),
+        db.from('daily_reports').select(`
+          report_date, self_evaluation, today_summary, tomorrow_plan, other_notes,
+          students!inner (id, name, username, status)
+        `).eq('report_date', reportDate).eq('students.status', 'active'),
+      ]);
     if (studentsError) throw studentsError;
     if (reportsError) throw reportsError;
-    if (recentSubmissionsError) throw recentSubmissionsError;
+    // 历史提交记录需分页拉全量：Supabase 托管 PostgREST 单请求最多返回 1000 行
+    // （content-range 0-999/*，超出部分静默截断，无报错）。每页 600 留足余量，
+    // 循环取到不满一页为止，不依赖具体上限数值。
+    const SUBMISSION_PAGE_SIZE = 600;
+    const recentSubmissions: Array<{ student_id: string; report_date: string }> = [];
+    for (let offset = 0; ; offset += SUBMISSION_PAGE_SIZE) {
+      const { data, error } = await db.from('daily_reports')
+        .select('student_id, report_date')
+        .lte('report_date', reportDate)
+        .range(offset, offset + SUBMISSION_PAGE_SIZE - 1);
+      if (error) throw error;
+      recentSubmissions.push(...((data ?? []) as Array<{ student_id: string; report_date: string }>));
+      if ((data?.length ?? 0) < SUBMISSION_PAGE_SIZE) break;
+    }
     if (!students?.length) throw new Error('没有启用的学生，无法发送每日邮件');
     // 无邮箱的学生跳过发送（邮件仍是全班日报，缺邮箱只影响其个人副本）。
     const recipients = students
